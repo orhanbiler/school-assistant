@@ -25,6 +25,7 @@ import {
   Link,
   Trash2,
   RotateCcw,
+  Users,
 } from "lucide-react";
 
 interface StoredFile {
@@ -45,6 +46,10 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState("discussion");
+  const [batchPosts, setBatchPosts] = useState("");
+  const [batchResponses, setBatchResponses] = useState<{name: string; post: string; response: string}[]>([]);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateFileSourceUrl = (index: number, url: string) => {
@@ -115,6 +120,93 @@ export default function Home() {
     setGeneratedContent("");
     setFiles([]);
     setStoredFiles([]);
+    setBatchPosts("");
+    setBatchResponses([]);
+  };
+
+  // Parse batch posts - split by "---" or double newlines with a name pattern
+  const parseBatchPosts = (text: string): {name: string; post: string}[] => {
+    const sections = text.split(/---+/).map(s => s.trim()).filter(s => s.length > 0);
+    return sections.map(section => {
+      // Try to extract name from first line
+      const lines = section.split('\n');
+      const firstLine = lines[0].trim();
+      // Check if first line looks like a name (short, no punctuation except comma)
+      const isNameLine = firstLine.length < 50 && !firstLine.includes('.') && !firstLine.includes('?');
+      if (isNameLine && lines.length > 1) {
+        return {
+          name: firstLine.replace(/[,:]/g, '').trim(),
+          post: lines.slice(1).join('\n').trim()
+        };
+      }
+      return {
+        name: `Response ${sections.indexOf(section) + 1}`,
+        post: section
+      };
+    });
+  };
+
+  // Generate batch responses
+  const handleBatchGenerate = async () => {
+    const posts = parseBatchPosts(batchPosts);
+    if (posts.length === 0) return;
+
+    setIsLoading(true);
+    setBatchResponses([]);
+    setBatchProgress(0);
+
+    const responses: {name: string; post: string; response: string}[] = [];
+
+    for (let i = 0; i < posts.length; i++) {
+      const { name, post } = posts[i];
+      setBatchProgress(i + 1);
+
+      try {
+        const formData = new FormData();
+        formData.append("type", "response");
+        formData.append("context", context);
+        formData.append("additionalInstructions", additionalInstructions);
+        formData.append("discussionPost", post);
+        
+        const fileSources = storedFiles.map(sf => ({
+          filename: sf.name,
+          sourceUrl: sf.sourceUrl,
+        }));
+        formData.append("fileSources", JSON.stringify(fileSources));
+        
+        files.forEach((file) => {
+          formData.append("files", file);
+        });
+
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        
+        if (!res.ok) {
+          responses.push({ name, post, response: `Error: ${data.error}` });
+        } else {
+          responses.push({ name, post, response: data.content });
+        }
+      } catch (error) {
+        responses.push({ name, post, response: `Error: ${error instanceof Error ? error.message : "Failed"}` });
+      }
+
+      // Update responses as we go
+      setBatchResponses([...responses]);
+    }
+
+    setIsLoading(false);
+    setBatchProgress(0);
+  };
+
+  // Copy individual batch response
+  const copyBatchResponse = async (index: number) => {
+    await navigator.clipboard.writeText(batchResponses[index].response);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,7 +418,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 mb-6">
+                  <TabsList className="grid w-full grid-cols-4 mb-6">
                     <TabsTrigger value="discussion" className="flex items-center gap-2">
                       <MessageSquare className="w-4 h-4" />
                       <span className="hidden sm:inline">Discussion</span>
@@ -338,6 +430,10 @@ export default function Home() {
                     <TabsTrigger value="response" className="flex items-center gap-2">
                       <Reply className="w-4 h-4" />
                       <span className="hidden sm:inline">Response</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="batch" className="flex items-center gap-2">
+                      <Users className="w-4 h-4" />
+                      <span className="hidden sm:inline">Batch</span>
                     </TabsTrigger>
                   </TabsList>
 
@@ -495,6 +591,106 @@ export default function Home() {
                         </>
                       )}
                     </Button>
+                  </TabsContent>
+
+                  <TabsContent value="batch" className="space-y-4">
+                    <div className="p-4 rounded-lg bg-accent/30 border border-border/50">
+                      <div className="flex items-start gap-3">
+                        <Users className="w-5 h-5 text-primary mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Batch Responses</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Generate replies to multiple classmates at once
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="batch-posts">Paste All Posts (separate with ---)</Label>
+                      <Textarea
+                        id="batch-posts"
+                        placeholder={`Prof. Read
+Your point about evidence preservation...
+---
+Syron Mckenzie  
+Your report shows a clear effort...
+---
+Greg Pilkerton
+Your report is well written...`}
+                        className="min-h-[200px] resize-none bg-background/50 font-mono text-sm"
+                        value={batchPosts}
+                        onChange={(e) => setBatchPosts(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Put each person&apos;s name on the first line, then their post. Separate posts with ---
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="batch-instructions">Special Instructions (Optional)</Label>
+                      <Textarea
+                        id="batch-instructions"
+                        placeholder="Context about your original post, tone preferences..."
+                        className="min-h-[60px] resize-none bg-background/50"
+                        value={additionalInstructions}
+                        onChange={(e) => setAdditionalInstructions(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      onClick={handleBatchGenerate}
+                      disabled={isLoading || !batchPosts.trim()}
+                      className="w-full"
+                      size="lg"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Generating {batchProgress} of {parseBatchPosts(batchPosts).length}...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Generate All Responses ({parseBatchPosts(batchPosts).length})
+                        </>
+                      )}
+                    </Button>
+
+                    {batchResponses.length > 0 && (
+                      <div className="space-y-3 mt-4">
+                        <Separator />
+                        <Label className="text-sm font-medium">Generated Responses</Label>
+                        {batchResponses.map((item, index) => (
+                          <div key={index} className="p-3 rounded-lg border border-border/50 bg-background/30 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-primary">{item.name}</span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => copyBatchResponse(index)}
+                                className="h-7 text-xs"
+                              >
+                                {copiedIndex === index ? (
+                                  <>
+                                    <Check className="w-3 h-3 mr-1" />
+                                    Copied
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3 mr-1" />
+                                    Copy
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                            <div className="text-xs text-muted-foreground line-clamp-2 italic">
+                              &quot;{item.post.substring(0, 100)}...&quot;
+                            </div>
+                            <div className="text-sm whitespace-pre-wrap bg-background/50 p-3 rounded border">
+                              {item.response}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
               </CardContent>
