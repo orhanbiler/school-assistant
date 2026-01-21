@@ -156,7 +156,7 @@ Sound human. Imperfect is better than polished. Vary rhythm.${hasReferences ? " 
 
       case "response":
         const postLen = discussionPost?.length || 0;
-        const sentenceCount = postLen > 1000 ? "5-7" : postLen > 400 ? "4-5" : "3-4";
+        const isLongPost = postLen > 1000;
         
         systemPrompt += ``;
         userPrompt = `Reply to this classmate's post. You are Orhan, a fellow student.
@@ -168,17 +168,29 @@ ${additionalInstructions ? `CONTEXT: ${additionalInstructions}` : ""}${reference
 
 WRITE EXACTLY LIKE THIS EXAMPLE (copy this tone and structure):
 ---
-The timeline in your report is clear - arrival, victim interview, room check. The door frame detail with the splintering is good for evidence later. One question though - you said James didn't notice anything unusual approaching the house, but the back door was forced. Wonder if whoever did it scoped the place first or came in from an alley or something. Also for the missing items, might be worth noting if any had sentimental vs just monetary value since that sometimes matters for victim impact.
+Hey Trevor,
+
+Your report follows a logical sequence - arrival, victim statement, then the room-by-room walkthrough. The detail about the splintered door frame and the lock being broken is the kind of physical evidence documentation that helps later on (Gehl & Plecas, 2017). One thing that stood out - James didn't notice anything off when approaching but the back door was forced from outside. Makes you wonder if someone was watching the place or came through a back alley.
+
+The neighborhood canvass was a good move. Even without making contact, knowing there are cameras at 189 gives something to follow up on. Did James mention if he usually keeps the back door locked? Sometimes that detail matters for how the entry happened.
+
+For the missing items without serials, that's going to make recovery harder, but at least you documented what was taken. The coordination with Deputy Smith and Detective Johnson shows how patrol sets things up for the investigative side to take over (Section 4.4, 2023).
+
+References:
+
+Gehl, R., & Plecas, D. (2017). Chapter 6: Applying the Investigative Tools. https://pressbooks.bccampus.ca/criminalinvestigation/chapter/chapter-6-applying-the-investigative-tools/
+
+Section 4.4: Investigations and Specialized Units. (2023). https://docmckee.com/cj/criminal-justice-an-overview-of-the-system/criminal-justice-section-4-4-investigations-and-specialized-units/
 ---
 
-RULES FOR YOUR RESPONSE:
-1. NO greeting like "Hey [Name]," - just start talking
-2. NO ending like "Hope it goes well!" or "Keep us posted!" - just stop when done
-3. NO words: vividly, proactive, systematic, thorough, captures, Overall, It's cool how, I noticed, I was curious, makes me wonder, really, very, truly, especially
-4. NO compliments about their work being "clear" or "detailed" or "smart"
-5. Include at least ONE question or mild critique
-6. Write ${sentenceCount} sentences max
-7. Sound slightly bored/casual, not enthusiastic`;
+RULES:
+1. START with "Hey [their first name]," 
+2. Write ${isLongPost ? "3-4 paragraphs" : "2-3 paragraphs"} - substantive length
+3. Include 1-2 citations from the source material with a References section at end
+4. Include at least ONE question
+5. NO ending like "Hope it goes well!" or "Keep us posted!" - end with your last point
+6. NO words: vividly, proactive, systematic, thorough, captures, crucial, vital, essential, Overall, It's cool how, I was curious
+7. Sound casual but engaged, not overly enthusiastic`;
         break;
 
       default:
