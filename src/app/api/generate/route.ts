@@ -155,38 +155,30 @@ Sound human. Imperfect is better than polished. Vary rhythm.${hasReferences ? " 
         break;
 
       case "response":
-        // Determine response length based on input length
-        const postLength = discussionPost?.length || 0;
-        const isLongPost = postLength > 1000;
-        const isMediumPost = postLength > 400;
-        
-        let lengthGuidance = "Write 3-4 sentences.";
-        if (isLongPost) {
-          lengthGuidance = "Write 6-10 sentences. This is a detailed post that deserves substantive engagement.";
-        } else if (isMediumPost) {
-          lengthGuidance = "Write 4-6 sentences.";
-        }
+        const postLen = discussionPost?.length || 0;
+        const sentenceCount = postLen > 1000 ? "5-7" : postLen > 400 ? "4-5" : "3-4";
         
         systemPrompt += ``;
-        userPrompt = `Write a reply to this classmate's post as Orhan (a student). ${lengthGuidance}
+        userPrompt = `Reply to this classmate's post. You are Orhan, a fellow student.
 
-CLASSMATE'S POST:
+POST:
 ${discussionPost}
 
 ${additionalInstructions ? `CONTEXT: ${additionalInstructions}` : ""}${referencesSection}
 
-REQUIREMENTS:
-- Engage with SPECIFIC details from their post (mention something specific they wrote)
-- Add your own observation or connect to course material
-- Don't just say "good job" - actually discuss the content
-- Casual but substantive tone
+WRITE EXACTLY LIKE THIS EXAMPLE (copy this tone and structure):
+---
+The timeline in your report is clear - arrival, victim interview, room check. The door frame detail with the splintering is good for evidence later. One question though - you said James didn't notice anything unusual approaching the house, but the back door was forced. Wonder if whoever did it scoped the place first or came in from an alley or something. Also for the missing items, might be worth noting if any had sentimental vs just monetary value since that sometimes matters for victim impact.
+---
 
-EXAMPLE FOR A DETAILED REPORT POST:
-"Your report follows a solid chronological structure - starting with arrival, then victim statement, then the room-by-room walkthrough. One thing I noticed is you included good detail about the entry point with the splintered door frame, which is the kind of evidence notation that matters for later (Gehl & Plecas, 2017). The neighborhood canvass was smart too, especially trying to get camera footage from next door. Did you find it tricky deciding how much of Parker's statement to include vs your own observations?"
-
-BANNED WORDS: super important, crucial, vital, essential, spot on, game-changer, indeed, surely, certainly, valuable, foundational, insightful, fascinating, impactful, pivotal, thorough job, great job, well done, nice work
-
-Be substantive. Engage with their actual content.`;
+RULES FOR YOUR RESPONSE:
+1. NO greeting like "Hey [Name]," - just start talking
+2. NO ending like "Hope it goes well!" or "Keep us posted!" - just stop when done
+3. NO words: vividly, proactive, systematic, thorough, captures, Overall, It's cool how, I noticed, I was curious, makes me wonder, really, very, truly, especially
+4. NO compliments about their work being "clear" or "detailed" or "smart"
+5. Include at least ONE question or mild critique
+6. Write ${sentenceCount} sentences max
+7. Sound slightly bored/casual, not enthusiastic`;
         break;
 
       default:
