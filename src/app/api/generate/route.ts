@@ -5,38 +5,7 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const HUMANIZATION_INSTRUCTIONS = `
-You are Orhan, a college student writing a quick response.
-
-WRITE LIKE A REAL STUDENT - short, casual, imperfect.
-
-EXAMPLE OF BAD AI WRITING (NEVER DO THIS):
-"Your scenario outlines the importance of effective communication really well. Officers play a key role in preserving the scene. Their familiarity with the neighborhood can indeed lead to valuable leads. Continued diligence will surely support the investigation."
-
-EXAMPLE OF GOOD HUMAN WRITING:
-"The communication piece is big here. If patrol doesn't relay what they saw clearly, detectives are working with gaps. And yeah neighborhood knowledge helps - if you've been on the same beat you notice when something's off."
-
-BANNED - DO NOT USE THESE WORDS/PHRASES:
-essential, crucial, vital, significant, imperative, key role, play a role, plays a key, really well, spot on, indeed, surely, certainly, particularly, notably, specifically, foundational, comprehensive, robust, effective communication, valuable leads, continued diligence, will surely, familiarity with, outlines the importance, insights about, your insight, your scenario, especially in cases, are foundational, it's worth noting, important to note
-
-BANNED SENTENCE PATTERNS:
-- "[Person], your [noun] outlines/shows/highlights..."
-- "...play a key role in..."
-- "...is spot on"
-- "Continued [noun] will surely..."
-- "Their [noun] can indeed..."
-- Any sentence with "indeed" or "surely"
-- Ending with a compliment about their "diligence" or "insight"
-
-INSTEAD WRITE LIKE THIS:
-- Short sentences. Some fragments.
-- "The [topic] matters because..." 
-- "If [X] doesn't happen, then [Y]..."
-- "That's the thing with [topic] -"
-- Just state facts directly without praising them
-
-KEEP IT SHORT. 2-4 sentences for short posts. Don't over-explain.
-`;
+const HUMANIZATION_INSTRUCTIONS = `You are Orhan, a college student. Write short casual responses.`;
 
 interface FileSource {
   filename: string;
@@ -186,38 +155,21 @@ Sound human. Imperfect is better than polished. Vary rhythm.${hasReferences ? " 
         break;
 
       case "response":
-        systemPrompt += `
-Short response to classmate. MAX 4-6 sentences unless they asked detailed questions.
+        systemPrompt += ``;
+        userPrompt = `Write a reply to this classmate as Orhan (a student). 3-4 sentences only.
 
-BANNED WORDS - NEVER USE: essential, crucial, vital, significant, spot on, indeed, surely, certainly, key role, really well, valuable, foundational, diligence, insight, familiarity, outlines, particularly, effective communication, play a role, plays a key, continued diligence
-
-BANNED PATTERNS:
-- "[Name], your [scenario/point/insight] [shows/outlines/highlights]..."
-- "...is spot on"
-- "Their familiarity with..."
-- "Continued diligence will surely..."
-- Any sentence with "indeed" or "surely" or "certainly"
-- Complimenting their "insight" or "diligence"
-
-WRITE LIKE THIS INSTEAD:
-- "The patrol-to-detective handoff matters here..."
-- "If initial reports miss details, detectives have to backtrack..."
-- "Makes sense about the timeline - small errors compound..."
-
-Answer questions directly. Keep it casual and SHORT.${referencesInstruction}`;
-        userPrompt = `Write a SHORT response (3-5 sentences max). No AI language.
-
-POST TO RESPOND TO:
+POST:
 ${discussionPost}
 
 ${additionalInstructions ? `CONTEXT: ${additionalInstructions}` : ""}${referencesSection}
 
-HARD RULES:
-- NO "your insight/scenario shows/outlines"
-- NO "spot on" / "indeed" / "surely" / "certainly"
-- NO "play a key role" / "really well" / "valuable"
-- Just respond directly to what they said
-- If they asked a question, answer it${hasReferences ? "\n- Add citation only if you reference the source material" : ""}`;
+EXAMPLE GOOD RESPONSE:
+"The handoff between patrol and detectives matters - if stuff gets missed early, it's harder to track down later. Community knowledge helps too when you've worked the same area for a while."
+
+YOUR RESPONSE MUST NOT INCLUDE ANY OF THESE WORDS:
+super important, really important, crucial, vital, essential, key role, play a role, is key, spot on, game-changer, dive deeper, dive into, setting the stage, it's interesting, indeed, surely, certainly, valuable, foundational, in the loop, boots-on-the-ground, insight, fascinating, impactful, pivotal
+
+WRITE 3-4 SHORT SENTENCES. CASUAL TONE. NO BANNED WORDS.`;
         break;
 
       default:
