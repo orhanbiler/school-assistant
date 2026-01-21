@@ -155,21 +155,38 @@ Sound human. Imperfect is better than polished. Vary rhythm.${hasReferences ? " 
         break;
 
       case "response":
+        // Determine response length based on input length
+        const postLength = discussionPost?.length || 0;
+        const isLongPost = postLength > 1000;
+        const isMediumPost = postLength > 400;
+        
+        let lengthGuidance = "Write 3-4 sentences.";
+        if (isLongPost) {
+          lengthGuidance = "Write 6-10 sentences. This is a detailed post that deserves substantive engagement.";
+        } else if (isMediumPost) {
+          lengthGuidance = "Write 4-6 sentences.";
+        }
+        
         systemPrompt += ``;
-        userPrompt = `Write a reply to this classmate as Orhan (a student). 3-4 sentences only.
+        userPrompt = `Write a reply to this classmate's post as Orhan (a student). ${lengthGuidance}
 
-POST:
+CLASSMATE'S POST:
 ${discussionPost}
 
 ${additionalInstructions ? `CONTEXT: ${additionalInstructions}` : ""}${referencesSection}
 
-EXAMPLE GOOD RESPONSE:
-"The handoff between patrol and detectives matters - if stuff gets missed early, it's harder to track down later. Community knowledge helps too when you've worked the same area for a while."
+REQUIREMENTS:
+- Engage with SPECIFIC details from their post (mention something specific they wrote)
+- Add your own observation or connect to course material
+- Don't just say "good job" - actually discuss the content
+- Casual but substantive tone
 
-YOUR RESPONSE MUST NOT INCLUDE ANY OF THESE WORDS:
-super important, really important, crucial, vital, essential, key role, play a role, is key, spot on, game-changer, dive deeper, dive into, setting the stage, it's interesting, indeed, surely, certainly, valuable, foundational, in the loop, boots-on-the-ground, insight, fascinating, impactful, pivotal
+EXAMPLE FOR A DETAILED REPORT POST:
+"Your report follows a solid chronological structure - starting with arrival, then victim statement, then the room-by-room walkthrough. One thing I noticed is you included good detail about the entry point with the splintered door frame, which is the kind of evidence notation that matters for later (Gehl & Plecas, 2017). The neighborhood canvass was smart too, especially trying to get camera footage from next door. Did you find it tricky deciding how much of Parker's statement to include vs your own observations?"
 
-WRITE 3-4 SHORT SENTENCES. CASUAL TONE. NO BANNED WORDS.`;
+BANNED WORDS: super important, crucial, vital, essential, spot on, game-changer, indeed, surely, certainly, valuable, foundational, insightful, fascinating, impactful, pivotal, thorough job, great job, well done, nice work
+
+Be substantive. Engage with their actual content.`;
         break;
 
       default:
