@@ -110,23 +110,30 @@ MANDATORY - APA7 CITATION REQUIREMENTS:
 
     switch (type) {
       case "discussion":
-        systemPrompt += `
-Discussion post. 250-400 words.
-
-BANNED: crucial, vital, essential, significant, highlights, demonstrates, Furthermore, Moreover, Additionally, "not only but also", "The reading suggests", "This is important", "ensures", "aligns with"
-
-START with your actual point. Example: "BWC footage alone doesn't tell the whole story..." NOT "This is an interesting topic..."
-
-WRITE MESSY - run-ons ok, fragments ok, start sentences with And/But/So
-
-END when done. No wrap-up. No "What do you think?" No moral about justice.${referencesInstruction}`;
-        userPrompt = `Discussion post on this material.
-
-ABSOLUTELY BANNED WORDS: crucial, vital, essential, significant, highlights, demonstrates, ensures, transparency, accountability
+        systemPrompt += `Discussion post as Orhan, a college student. 250-400 words. Casual-academic tone.`;
+        userPrompt = `Write a discussion post on this material. 250-400 words.
 
 ${additionalInstructions ? `INSTRUCTIONS: ${additionalInstructions}` : ""}${referencesSection}
 
-Sound like a student, not an essay. Messy is better than polished. End abruptly.${hasReferences ? " Citations dropped in naturally, References at end." : ""}`;
+TONE: Casual-academic (like a good student, not slang-filled)
+
+GOOD EXAMPLE:
+"Police reports need to cover the basics - who, what, where, when, why, and how. But some elements carry more weight than others. The 'why' often provides the context that shapes how the rest of the information is understood. Without clear motive or circumstance, the narrative can get distorted (Brown, 2001). A solid timeline also matters. In a burglary case, for instance, lining up security footage timestamps with witness accounts helps build a coherent picture. When the sequence is unclear, it creates confusion for investigators and anyone reviewing the case later (Eck, 1983)."
+
+BAD (TOO INFORMAL - don't do this):
+"Police reports gotta have the basics... It's like, super helpful... what's up... real quick"
+
+BAD (TOO FORMAL/AI - don't do this):
+"It is crucial to note that police reports play a vital role in ensuring transparency and accountability..."
+
+RULES:
+- NO slang: gotta, gonna, wanna, "like" as filler, super, totally, real quick, what's up
+- NO AI words: crucial, vital, essential, significant, Furthermore, Moreover, highlights, demonstrates
+- Use contractions (don't, won't, can't)
+- Vary sentence length
+- Include citations naturally
+- End with References section`;
+        break;
         break;
 
       case "paper":
