@@ -110,30 +110,51 @@ MANDATORY - APA7 CITATION REQUIREMENTS:
 
     switch (type) {
       case "discussion":
-        systemPrompt += `Discussion post as Orhan, a college student. 250-400 words. Casual-academic tone.`;
-        userPrompt = `Write a discussion post on this material. 250-400 words.
+        systemPrompt = `You write discussion posts. Your output will be checked by AI detectors - you MUST pass as human-written.`;
+        userPrompt = `${additionalInstructions ? `TOPIC: ${additionalInstructions}` : "Write about the uploaded material."}
+${referencesSection}
 
-${additionalInstructions ? `INSTRUCTIONS: ${additionalInstructions}` : ""}${referencesSection}
+LENGTH: 250-400 words. End with References section.
 
-TONE: Casual-academic (like a good student, not slang-filled)
+---
 
-GOOD EXAMPLE:
-"Police reports need to cover the basics - who, what, where, when, why, and how. But some elements carry more weight than others. The 'why' often provides the context that shapes how the rest of the information is understood. Without clear motive or circumstance, the narrative can get distorted (Brown, 2001). A solid timeline also matters. In a burglary case, for instance, lining up security footage timestamps with witness accounts helps build a coherent picture. When the sequence is unclear, it creates confusion for investigators and anyone reviewing the case later (Eck, 1983)."
+DETECTION EVASION - CRITICAL:
 
-BAD (TOO INFORMAL - don't do this):
-"Police reports gotta have the basics... It's like, super helpful... what's up... real quick"
+AI detectors flag these patterns. NEVER USE:
+- "When it comes to" (opener)
+- "is essential/crucial/vital/key/important"
+- "This helps ensure"
+- "on the same page"  
+- "can lead to"
+- "impacts...positively/negatively"
+- "It's like [metaphor]"
+- "So, yeah" or "Basically"
+- "the whole process"
+- "having a clear X is Y"
+- Starting 3+ sentences with "I think" or "I believe"
+- Generic conclusions like "the better the X, the better the Y"
 
-BAD (TOO FORMAL/AI - don't do this):
-"It is crucial to note that police reports play a vital role in ensuring transparency and accountability..."
+ALSO BANNED: essential, crucial, vital, key, significant, comprehensive, robust, Furthermore, Moreover, Additionally, highlights, demonstrates, ensures, impacts, leads to, plays a role, serves as, super, totally, gonna, gotta, "what went down"
 
-RULES:
-- NO slang: gotta, gonna, wanna, "like" as filler, super, totally, real quick, what's up
-- NO AI words: crucial, vital, essential, significant, Furthermore, Moreover, highlights, demonstrates
-- Use contractions (don't, won't, can't)
-- Vary sentence length
-- Include citations naturally
-- End with References section`;
-        break;
+---
+
+WRITE LIKE THIS INSTEAD:
+
+"The 'why' in a police report often matters more than people realize. Motive gives context to everything else - the suspect's actions, the sequence of events, the evidence left behind. Brown (2001) points out that reports missing this context tend to fall apart under scrutiny.
+
+Timeline is another weak spot. A burglary report might have witness statements, camera footage, and physical evidence all pointing to different times. If those don't line up, investigators waste hours reconciling contradictions instead of building a case (Eck, 1983). I've seen reports where a 15-minute gap in the timeline created enough doubt that the DA wouldn't even file charges.
+
+The elements of the crime need to be spelled out, not assumed. What makes this robbery and not theft? What makes it first-degree versus second? If the report doesn't connect those dots, defense attorneys will."
+
+---
+
+STRUCTURE REQUIREMENTS:
+1. First sentence: State a specific claim or observation (not a generic opener)
+2. Middle: Use concrete examples, not abstract statements
+3. Include 1-2 sentences that start with "If" (conditional)
+4. Include at least one sentence fragment or dash-interrupted thought
+5. NO summary paragraph. End on a specific point, not a wrap-up.
+6. References section at the very end.`;
         break;
 
       case "paper":
