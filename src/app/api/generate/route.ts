@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const client = new OpenAI({
+const openaiClient = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 const HUMANIZATION_INSTRUCTIONS = `You are Orhan, a college student. Write short casual responses.`;
 
@@ -16,6 +19,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const type = formData.get("type") as string;
+    const aiModel = formData.get("aiModel") as string || "gpt-5.2";
     const context = formData.get("context") as string;
     const additionalInstructions = formData.get("additionalInstructions") as string;
     const pageCount = formData.get("pageCount") as string;
@@ -229,22 +233,43 @@ RULES:
       text: userPrompt,
     });
 
-    const response = await client.responses.create({
-      model: "gpt-5.2",
-      input: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: inputContent,
-        },
-      ],
-    });
+    let generatedContent = "";
+
+    if (aiModel.startsWith("gemini")) {
+      // Use Gemini
+      const model = geminiClient.getGenerativeModel({ model: aiModel });
+      
+      // Build the full prompt for Gemini (it doesn't have separate system/user like OpenAI)
+      const textContent = inputContent
+        .filter(c => c.type === "input_text" && c.text)
+        .map(c => c.text)
+        .join("\n\n");
+      
+      const fullPrompt = `${systemPrompt}\n\n${textContent}`;
+      
+      const result = await model.generateContent(fullPrompt);
+      const response = await result.response;
+      generatedContent = response.text();
+    } else {
+      // Use OpenAI (gpt-5.2 or gpt-4o)
+      const response = await openaiClient.responses.create({
+        model: aiModel,
+        input: [
+          {
+            role: "system",
+            content: systemPrompt,
+          },
+          {
+            role: "user",
+            content: inputContent,
+          },
+        ],
+      });
+      generatedContent = response.output_text;
+    }
 
     return NextResponse.json({
-      content: response.output_text,
+      content: generatedContent,
       type,
     });
   } catch (error) {

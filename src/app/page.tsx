@@ -50,6 +50,7 @@ export default function Home() {
   const [batchResponses, setBatchResponses] = useState<{name: string; post: string; response: string}[]>([]);
   const [batchProgress, setBatchProgress] = useState(0);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [aiModel, setAiModel] = useState("gpt-5.2");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateFileSourceUrl = (index: number, url: string) => {
@@ -70,6 +71,7 @@ export default function Home() {
         if (data.discussionPost) setDiscussionPost(data.discussionPost);
         if (data.generatedContent) setGeneratedContent(data.generatedContent);
         if (data.activeTab) setActiveTab(data.activeTab);
+        if (data.aiModel) setAiModel(data.aiModel);
         
         // Restore files from stored base64 data
         if (data.storedFiles && data.storedFiles.length > 0) {
@@ -106,9 +108,10 @@ export default function Home() {
       generatedContent,
       activeTab,
       storedFiles,
+      aiModel,
     };
     localStorage.setItem("scholarQuillData", JSON.stringify(dataToSave));
-  }, [context, additionalInstructions, pageCount, discussionPost, generatedContent, activeTab, storedFiles]);
+  }, [context, additionalInstructions, pageCount, discussionPost, generatedContent, activeTab, storedFiles, aiModel]);
 
   // Clear all saved data
   const clearAllData = () => {
@@ -122,6 +125,7 @@ export default function Home() {
     setStoredFiles([]);
     setBatchPosts("");
     setBatchResponses([]);
+    setAiModel("gpt-5.2");
   };
 
   // Parse batch posts - split by "---" or double newlines with a name pattern
@@ -164,6 +168,7 @@ export default function Home() {
       try {
         const formData = new FormData();
         formData.append("type", "response");
+        formData.append("aiModel", aiModel);
         formData.append("context", context);
         formData.append("additionalInstructions", additionalInstructions);
         formData.append("discussionPost", post);
@@ -248,6 +253,7 @@ export default function Home() {
     try {
       const formData = new FormData();
       formData.append("type", type);
+      formData.append("aiModel", aiModel);
       formData.append("context", context);
       formData.append("additionalInstructions", additionalInstructions);
       formData.append("pageCount", pageCount);
@@ -307,15 +313,31 @@ export default function Home() {
                 <p className="text-sm text-muted-foreground">Academic Writing Assistant for Orhan</p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearAllData}
-              className="flex items-center gap-2 text-muted-foreground hover:text-destructive"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Clear All
-            </Button>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="model-select" className="text-sm text-muted-foreground whitespace-nowrap">AI Model:</Label>
+                <select
+                  id="model-select"
+                  value={aiModel}
+                  onChange={(e) => setAiModel(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="gpt-5.2">GPT-5.2 (OpenAI)</option>
+                  <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                </select>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearAllData}
+                className="flex items-center gap-2 text-muted-foreground hover:text-destructive"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Clear All
+              </Button>
+            </div>
           </div>
         </div>
       </header>
