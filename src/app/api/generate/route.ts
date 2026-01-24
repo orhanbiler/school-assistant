@@ -42,18 +42,16 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Process uploaded files - send them directly to OpenAI
+    // Process uploaded files - extract text content
     for (const file of files) {
       const bytes = await file.arrayBuffer();
-      const base64 = Buffer.from(bytes).toString("base64");
       
       if (file.type === "application/pdf") {
+        // PDFs are not directly readable by GPT-4o - skip for now
+        // User should paste PDF text content manually in the context field
         inputContent.push({
-          type: "input_file",
-          file: {
-            file_data: `data:application/pdf;base64,${base64}`,
-            filename: file.name,
-          },
+          type: "input_text",
+          text: `--- File: ${file.name} (PDF - content not extracted, please paste text in context field) ---`,
         });
       } else if (file.type === "text/plain" || file.name.endsWith(".txt")) {
         const text = new TextDecoder().decode(bytes);
