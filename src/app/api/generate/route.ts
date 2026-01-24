@@ -230,7 +230,7 @@ RULES:
     });
 
     const response = await client.responses.create({
-      model: "gpt-4o",
+      model: "gpt-5.2",
       input: [
         {
           role: "system",
