@@ -51,6 +51,7 @@ export default function Home() {
   const [batchProgress, setBatchProgress] = useState(0);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [aiModel, setAiModel] = useState("gpt-5.2");
+  const [isRevising, setIsRevising] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateFileSourceUrl = (index: number, url: string) => {
@@ -296,6 +297,36 @@ export default function Home() {
     await navigator.clipboard.writeText(generatedContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRevise = async () => {
+    if (!generatedContent) return;
+    
+    setIsRevising(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append("type", "revise");
+      formData.append("aiModel", aiModel);
+      formData.append("contentToRevise", generatedContent);
+      
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to revise content");
+      }
+
+      setGeneratedContent(data.content);
+    } catch (error) {
+      console.error("Revision error:", error);
+    } finally {
+      setIsRevising(false);
+    }
   };
 
   return (
@@ -736,24 +767,45 @@ Your report is well written...`}
                     </CardDescription>
                   </div>
                   {generatedContent && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={copyToClipboard}
-                      className="flex items-center gap-2"
-                    >
-                      {copied ? (
-                        <>
-                          <Check className="w-4 h-4" />
-                          Copied!
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-4 h-4" />
-                          Copy
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRevise}
+                        disabled={isRevising}
+                        className="flex items-center gap-2"
+                      >
+                        {isRevising ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Revising...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            Humanize
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={copyToClipboard}
+                        className="flex items-center gap-2"
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </CardHeader>

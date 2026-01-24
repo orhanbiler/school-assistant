@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
     const additionalInstructions = formData.get("additionalInstructions") as string;
     const pageCount = formData.get("pageCount") as string;
     const discussionPost = formData.get("discussionPost") as string;
+    const contentToRevise = formData.get("contentToRevise") as string;
     const fileSourcesJson = formData.get("fileSources") as string;
     const files = formData.getAll("files") as File[];
     
@@ -221,6 +222,51 @@ RULES:
 5. NO ending like "Hope it goes well!" or "Keep us posted!" - end with your last point
 6. NO words: vividly, proactive, systematic, thorough, captures, crucial, vital, essential, Overall, It's cool how, I was curious
 7. Sound casual but engaged, not overly enthusiastic`;
+        break;
+
+      case "revise":
+        systemPrompt = `You are a humanization expert. Your job is to rewrite AI-generated text to sound completely human-written. The revised text MUST pass AI detection tools.`;
+        userPrompt = `REWRITE this text to sound 100% human-written. It currently gets flagged as AI-generated.
+
+ORIGINAL TEXT:
+${contentToRevise}
+
+---
+
+REWRITING RULES:
+
+1. VARY SENTENCE STRUCTURE dramatically:
+   - Mix very short sentences (3-5 words) with longer ones
+   - Use sentence fragments occasionally
+   - Start some sentences with "And", "But", "So"
+   - Use dashes mid-sentence for asides
+
+2. REMOVE AI PATTERNS:
+   - No "Furthermore", "Moreover", "Additionally", "However" at sentence starts
+   - No "It is important to note", "It should be noted"
+   - No passive voice where active works
+   - No parallel structure in lists (vary the grammar)
+   - No "This [noun] [verb]s" pattern repeatedly
+
+3. ADD HUMAN IMPERFECTIONS:
+   - Occasional informal word choices
+   - One or two slightly awkward phrasings
+   - Vary paragraph lengths (some short, some longer)
+   - Don't over-explain - leave some things implied
+
+4. MAKE IT CONVERSATIONAL:
+   - Use contractions (don't, won't, it's)
+   - Use "you" and "I" where appropriate
+   - Include rhetorical questions occasionally
+   - Sound like you're explaining to a friend
+
+5. KEEP THE SAME:
+   - All factual content and citations
+   - The References section exactly as-is
+   - The overall meaning and argument
+   - Approximately the same length
+
+OUTPUT: The rewritten text only. No explanations or meta-commentary.`;
         break;
 
       default:
