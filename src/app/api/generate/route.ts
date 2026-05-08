@@ -2,11 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const openaiClient = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is not set");
+    }
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
+}
+
+let _gemini: GoogleGenerativeAI | null = null;
+function getGemini(): GoogleGenerativeAI {
+  if (!_gemini) {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not set");
+    }
+    _gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  }
+  return _gemini;
+}
 
 const HUMANIZATION_INSTRUCTIONS = `You are Orhan, a college student. Write short casual responses.`;
 
@@ -37,7 +56,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Build input content array for OpenAI
-    const inputContent: Array<{type: string; text?: string; file?: {file_data: string; filename: string}}> = [];
+    type InputTextContent = { type: "input_text"; text: string };
+    const inputContent: InputTextContent[] = [];
     
     // Add text context
     if (context) {
@@ -107,7 +127,7 @@ MANDATORY - APA7 CITATION REQUIREMENTS:
 - YOU MUST include the References section - do not skip it`;
       
       referencesSection = "\n\nSOURCE URLS FOR UPLOADED MATERIALS (include in References if you cite from them):\n";
-      validFileSources.forEach((fs, i) => {
+      validFileSources.forEach((fs) => {
         referencesSection += `- "${fs.filename}": ${fs.sourceUrl}\n`;
       });
       referencesSection += "\nIf you reference content from any of these materials, include the URL in your References section at the end.";
@@ -283,7 +303,7 @@ OUTPUT: The rewritten text only. No explanations or meta-commentary.`;
 
     if (aiModel.startsWith("gemini")) {
       // Use Gemini
-      const model = geminiClient.getGenerativeModel({ model: aiModel });
+      const model = getGemini().getGenerativeModel({ model: aiModel });
       
       // Build the full prompt for Gemini (it doesn't have separate system/user like OpenAI)
       const textContent = inputContent
@@ -298,7 +318,7 @@ OUTPUT: The rewritten text only. No explanations or meta-commentary.`;
       generatedContent = response.text();
     } else {
       // Use OpenAI (gpt-5.2 or gpt-4o)
-      const response = await openaiClient.responses.create({
+      const response = await getOpenAI().responses.create({
         model: aiModel,
         input: [
           {
