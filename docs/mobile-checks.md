@@ -9,6 +9,7 @@ Checked on September 6, 2026 in a Chromium browser using viewport emulation. The
 - A seven-column draft table scrolled within its own boundary with readable column widths. Long reference URLs wrapped without widening the page.
 - At 320 × 640, a 116-page PDF opened in a 288 × 608 dialog. Page selection and the fixed action area stayed within the viewport. Choosing a short page range enabled adding the selected text.
 - Checked the installation instructions, model picker, discussion follow-up layout, sign-out, and sign-in at the narrowest size.
+- Rechecked the redesigned section navigation at 320 × 640 in light mode and 390 × 844 in dark mode. All three labels fit within 48-pixel-high links. The selected section updates as the page scrolls, destinations sit below the sticky control, and the navigation is hidden at the desktop breakpoint. Rounded styling, icons, and a tinted selected state replace the original full-width text bar.
 - Verified notes-only generation, manual draft editing, reload persistence, AI light editing, and restoring the previous draft with a synthetic provider. No live model or detector score was evaluated during these checks.
 
 ## Device features

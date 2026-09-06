@@ -31,6 +31,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { AppHeader } from "@/components/scholar/app-header";
+import { WorkspaceNavigation } from "@/components/scholar/workspace-navigation";
 import { FileUpload, type StoredFile } from "@/components/scholar/file-upload";
 import { GeneratedOutput } from "@/components/scholar/generated-output";
 import { BatchResponses, type BatchResponse } from "@/components/scholar/batch-responses";
@@ -364,11 +365,7 @@ export default function WritingWorkspace() {
         onClearAll={onClearAll}
       />
 
-      <nav aria-label="Workspace sections" className="mobile-section-nav sticky top-0 z-40 grid grid-cols-3 border-b border-border bg-background/95 backdrop-blur lg:hidden">
-        <a href="#materials">Materials</a>
-        <a href="#writing">Write</a>
-        <a href="#draft">My draft</a>
-      </nav>
+      <WorkspaceNavigation />
       <div className="workspace-container container mx-auto px-3 sm:px-6 py-4 sm:py-8">
         <p role="status" className={`mb-4 text-xs ${saveStatus === "unavailable" ? "text-destructive" : "text-muted-foreground"}`}>
           {saveStatus === "loading" ? "Opening your workspace…" : saveStatus === "saved" ? "Saved on this device" : "Device storage is unavailable. Copy or download your draft before leaving."}
