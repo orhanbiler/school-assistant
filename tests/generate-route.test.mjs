@@ -149,7 +149,7 @@ test("revision restores the original bibliography even if the provider recreates
   reply = "A useful draft.";
 });
 
-test("unreadable uploads and invalid inputs fail before a provider call", async () => {
+test("raw documents that bypass extraction and invalid inputs fail before a provider call", async () => {
   const count = calls.length;
   const cases = [
     [{ type: "unknown" }],
@@ -163,6 +163,26 @@ test("unreadable uploads and invalid inputs fail before a provider call", async 
   ];
   for (const [fields, files] of cases) assert.equal((await request(fields, files)).status, 400);
   assert.equal(calls.length, count);
+});
+
+test("reviewed PDF and Word passages reach both providers with their source metadata", async () => {
+  const materials = [{ filename: "reading.pdf", text: "The report recommends listening.", sourceUrl: "https://example.org/report" }, { filename: "rubric.docx", text: "Explain your reasoning." }];
+  for (const aiModel of ["gpt-5.2", "gemini-2.5-pro"]) {
+    assert.equal((await request({ type: "discussion", aiModel, extractedMaterials: JSON.stringify(materials) })).status, 200);
+    const call = calls.at(-1);
+    const input = userData(aiModel === "gpt-5.2" ? call.input[1].content : call.contents[0].parts[0].text);
+    assert.deepEqual(input.materials, materials);
+  }
+});
+
+test("invalid or oversized extracted text cannot reserve quota or reach a provider", async () => {
+  const before = calls.length, quotaBefore = quotaCalls.length;
+  for (const extractedMaterials of ["invalid", "null", "{}", "[null]", '[{"filename":"bad.pdf","text":""}]', JSON.stringify([{ filename: "large.pdf", text: "😀".repeat(4001) }]), JSON.stringify(Array(4).fill({ filename: "reading.docx", text: "Notes." }))]) {
+    assert.ok([400, 413].includes((await request({ type: "discussion", context: "Topic", extractedMaterials })).status));
+  }
+  assert.equal((await request({ type: "discussion", extractedMaterials: JSON.stringify(Array(3).fill({ filename: "reading.pdf", text: "Notes." })) }, [new File(["Extra."], "extra.txt")])).status, 413);
+  assert.equal(calls.length, before);
+  assert.equal(quotaCalls.length, quotaBefore);
 });
 
 test("malformed optional citation metadata does not discard readable material", async () => {

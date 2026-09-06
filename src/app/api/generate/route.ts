@@ -5,6 +5,7 @@ import { DEFAULT_MODEL, findModel } from "@/lib/models";
 import { createRequestAuth } from "@/lib/server/supabase";
 import { getAccessConfig } from "@/lib/server/access-config";
 import { isSameOriginRequest } from "@/lib/server/authorization";
+import { readExtractedMaterials } from "@/lib/server/extracted-materials";
 import { readGenerationForm, RequestError } from "@/lib/server/request-body";
 import { getMaxOutputTokens, reserveGeneration, UsageError } from "@/lib/server/usage-limits";
 import { MAX_FILES, MAX_FILE_BYTES, MAX_PROMPT_BYTES, PROVIDER_TIMEOUT_MS } from "@/lib/request-limits";
@@ -123,9 +124,9 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
       // Source URLs are optional; malformed metadata must not discard readable text.
     }
 
-    const materials: { filename: string; text: string; sourceUrl?: string }[] = [];
+    const materials = readExtractedMaterials(textField(formData, "extractedMaterials"));
     const files = formData.getAll("files");
-    if (files.length > MAX_FILES) return json({ error: `Upload at most ${MAX_FILES} files.` }, { status: 413 });
+    if (files.length + materials.length > MAX_FILES) return json({ error: `Upload at most ${MAX_FILES} files.` }, { status: 413 });
     for (const file of files) {
       if (typeof file === "string") {
         return json({ error: "Invalid uploaded file." }, { status: 400 });
@@ -137,7 +138,7 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
       const isHtml = /\.html?$/i.test(file.name);
       if (!isText && !isHtml) {
         return json(
-          { error: `The text in ${file.name} cannot be read here. Paste its text into Additional Context, or upload a TXT or HTML file.` },
+          { error: `Use the app's file picker to read ${file.name} first. Only selected document text can be submitted for generation.` },
           { status: 400 },
         );
       }

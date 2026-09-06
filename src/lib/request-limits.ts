@@ -21,4 +21,12 @@ export const TEXT_FIELD_LIMITS: Record<string, number> = {
   writingSample: 6000,
   writingTone: 30,
   fileSources: 3000,
+  extractedMaterials: 60_000,
 };
+
+// Original documents are read in a browser worker, never uploaded to Vercel.
+export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
+export const MAX_DOCUMENT_PAGES = 250;
+export const MAX_DOCUMENT_CHARACTERS = 500_000;
+export const MAX_MATERIAL_TEXT_BYTES = 16_000;
+export const DOCUMENT_READ_TIMEOUT_MS = 30_000;

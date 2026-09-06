@@ -1,20 +1,26 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { FileText, Link as LinkIcon, Trash2, Upload } from "lucide-react";
+import { FileText, Link as LinkIcon, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { DocumentReview } from "./document-review";
+import { readDocument } from "@/lib/read-document-client";
+import type { ExtractedDocument } from "@/lib/document-extraction";
 import { cn } from "@/lib/utils";
-import { MAX_FILE_BYTES, MAX_FILES } from "@/lib/request-limits";
+import { MAX_DOCUMENT_BYTES, MAX_FILE_BYTES, MAX_FILES } from "@/lib/request-limits";
 
 export interface StoredFile {
   name: string;
   type: string;
-  data: string; // base64
+  data: string; // base64 for legacy TXT/HTML uploads; empty for extracted documents
+  text?: string;
+  pages?: string;
+  originalSize?: number;
   sourceUrl: string;
 }
 
@@ -25,7 +31,7 @@ interface FileUploadProps {
   onUpdateSource: (index: number, url: string) => void;
 }
 
-const ACCEPTED = ".txt,.html,.htm";
+const ACCEPTED = ".pdf,.docx,.txt,.html,.htm";
 
 function fileToStored(file: File): Promise<StoredFile> {
   return new Promise((resolve, reject) => {
@@ -48,49 +54,74 @@ function fileSize(bytes: number): string {
 export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [reading, setReading] = useState(false);
+  const readingRef = useRef(false);
+  const [pending, setPending] = useState<{ id: string; file: File; document: ExtractedDocument }[]>([]);
 
   const ingest = useCallback(
     async (fileList: FileList | File[]) => {
+      if (readingRef.current || pending.length) return;
       const files = Array.from(fileList);
       if (files.length + storedFiles.length > MAX_FILES) {
         toast.error(`Upload at most ${MAX_FILES} files. Keep only the relevant excerpts.`);
         return;
       }
       const valid = files.filter((f) => {
-        if (!/\.(txt|html?)$/i.test(f.name)) {
+        if (!/\.(pdf|docx|txt|html?)$/i.test(f.name)) {
           toast.error(`Cannot read ${f.name}`, {
-            description: "Paste PDF or Word text into Additional Context, or upload TXT or HTML.",
+            description: "Use PDF, Word (.docx), TXT, or HTML. Save older .doc files as .docx first.",
           });
           return false;
         }
-        if (f.size > MAX_FILE_BYTES) {
-          toast.error(`${f.name} is too large`, { description: "Max 128 KB per file. Upload a short excerpt." });
+        const document = /\.(pdf|docx)$/i.test(f.name);
+        if (f.size > (document ? MAX_DOCUMENT_BYTES : MAX_FILE_BYTES) || f.name.length > 255) {
+          toast.error(`${f.name} is too large`, { description: document ? "Max 25 MB per PDF or Word document; keep filenames under 256 characters." : "Max 128 KB per text file. Upload a short excerpt." });
           return false;
         }
         return true;
       });
       if (valid.length === 0) return;
 
+      readingRef.current = true;
+      setReading(true);
+      const stored: StoredFile[] = [];
+      const documents: { id: string; file: File; document: ExtractedDocument }[] = [];
       try {
-        const stored = await Promise.all(valid.map(fileToStored));
-        onAdd(stored);
-        toast.success(`Added ${stored.length} file${stored.length === 1 ? "" : "s"}`);
-      } catch {
-        toast.error("Could not read one or more files");
-      }
+        for (const file of valid) {
+          try {
+            if (/\.(pdf|docx)$/i.test(file.name)) documents.push({ id: crypto.randomUUID(), file, document: await readDocument(file) });
+            else stored.push(await fileToStored(file));
+          } catch (error) {
+            toast.error(`Cannot read ${file.name}`, { description: error instanceof Error ? error.message : "Save a new copy and try again." });
+          }
+        }
+        if (stored.length) { onAdd(stored); toast.success(`Added ${stored.length} file${stored.length === 1 ? "" : "s"}`); }
+        setPending(documents);
+      } finally { readingRef.current = false; setReading(false); }
     },
-    [onAdd, storedFiles.length],
+    [onAdd, storedFiles.length, pending.length],
   );
 
   return (
     <div className="space-y-4">
+      {pending[0] && <DocumentReview key={pending[0].id} name={pending[0].file.name} document={pending[0].document}
+        onCancel={() => setPending((items) => items.slice(1))}
+        onUse={(text, pages) => {
+          const { file } = pending[0];
+          if (storedFiles.length >= MAX_FILES) { toast.error(`Upload at most ${MAX_FILES} files.`); return; }
+          onAdd([{ name: file.name, type: "text/plain", data: "", sourceUrl: "", text, pages, originalSize: file.size }]);
+          setPending((items) => items.slice(1));
+          toast.success("Selected text added");
+        }} />}
       <div
         role="button"
         tabIndex={0}
         aria-label="Upload files"
-        onClick={() => inputRef.current?.click()}
+        aria-disabled={reading}
+        aria-busy={reading}
+        onClick={() => { if (!reading) inputRef.current?.click(); }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
+          if (!reading && (e.key === "Enter" || e.key === " ")) {
             e.preventDefault();
             inputRef.current?.click();
           }
@@ -116,6 +147,7 @@ export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource }: Fil
         <input
           ref={inputRef}
           type="file"
+          disabled={reading}
           multiple
           accept={ACCEPTED}
           onChange={(e) => {
@@ -124,22 +156,23 @@ export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource }: Fil
           }}
           className="hidden"
         />
-        <Upload
+        {reading ? <Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin text-primary" /> : <Upload
           className={cn(
             "w-10 h-10 mx-auto mb-3 transition-colors",
             isDragging ? "text-primary" : "text-muted-foreground",
           )}
-        />
+        />}
         <p className="text-sm font-medium">
-          {isDragging ? "Release to upload" : "Drop files here or click to browse"}
+          {reading ? "Reading document…" : isDragging ? "Release to upload" : "Drop files here or click to browse"}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          TXT, HTML &middot; up to 3 files, 128 KB each
+          PDF, DOCX, TXT, HTML &middot; up to 3 files
         </p>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        For PDF or Word documents, paste the relevant text into Additional Context.
+        PDFs and Word documents: up to 25 MB. Text files: up to 128 KB.
+        Choose the pages or passages to use from long documents. Scanned PDFs need text recognition first.
         Source URLs are used for citations; linked pages are not fetched.
       </p>
 
@@ -151,7 +184,7 @@ export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource }: Fil
           </Label>
 
           {storedFiles.map((sf, index) => {
-            const sizeBytes = sf.data ? Math.floor(sf.data.length * 0.75) : 0;
+            const sizeBytes = sf.originalSize || (sf.data ? Math.floor(sf.data.length * 0.75) : 0);
             return (
               <div
                 key={`${sf.name}-${index}`}
@@ -181,6 +214,10 @@ export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource }: Fil
                     <TooltipContent>Remove file</TooltipContent>
                   </Tooltip>
                 </div>
+                {sf.text !== undefined && <details className="text-sm">
+                  <summary className="cursor-pointer text-muted-foreground">Review selected text{sf.pages ? ` · PDF pages ${sf.pages}` : ""}</summary>
+                  <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs">{sf.text}</p>
+                </details>}
                 <div className="flex items-center gap-2">
                   <LinkIcon className="w-4 h-4 text-muted-foreground shrink-0" />
                   <Input

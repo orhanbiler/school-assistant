@@ -8,7 +8,7 @@ Use **My Thread** to reply to a student or professor under your own discussion p
 
 ## Writing voice and quality
 
-Use **Your Writing Voice** to choose a tone and optionally paste a short sample of your own writing. These settings apply to drafts, revisions, and batch replies. Add your perspective and relevant source excerpts in Additional Context. Upload TXT or HTML files; paste text from PDF or Word documents.
+Use **Your Writing Voice** to choose a tone and optionally paste a short sample of your own writing. These settings apply to drafts, revisions, and batch replies. Add your perspective and relevant source excerpts in Additional Context. Upload PDF, Word (.docx), TXT, or HTML files. PDF and Word documents are read on your device; review the text and choose relevant PDF pages before adding it. Only the selected text is saved and sent for generation. PDFs and Word files can be up to 25 MB; scanned PDFs need text recognition first, and older .doc files must be saved as .docx.
 
 **Refine Writing** edits for clarity and flow while preserving the draft's meaning and restoring its reference list unchanged. See the [writing quality review guide](docs/writing-quality.md) for repeatable examples and validation steps. The app does not guarantee detector scores.
 

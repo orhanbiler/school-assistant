@@ -13,6 +13,7 @@ export async function proxy(request: NextRequest) {
     "img-src 'self' data: blob:",
     "font-src 'self'",
     `connect-src 'self'${development ? " ws: wss:" : ""}`,
+    "worker-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",

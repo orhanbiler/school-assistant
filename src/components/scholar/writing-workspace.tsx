@@ -174,8 +174,11 @@ export default function WritingWorkspace() {
       filename: sf.name,
       sourceUrl: sf.sourceUrl,
     }))));
+    formData.append("extractedMaterials", JSON.stringify(storedFiles.filter((sf) => sf.text !== undefined).map((sf) => ({
+      filename: sf.name, text: sf.text, sourceUrl: sf.sourceUrl, pages: sf.pages,
+    }))));
     for (const sf of storedFiles) {
-      formData.append("files", storedFileToFile(sf));
+      if (sf.text === undefined) formData.append("files", storedFileToFile(sf));
     }
     return formData;
   }, [aiModel, context, additionalInstructions, pageCount, writingSample, writingTone, storedFiles]);
@@ -354,7 +357,7 @@ export default function WritingWorkspace() {
                   Upload Materials
                 </CardTitle>
                 <CardDescription>
-                  Upload text or HTML course materials, or paste an excerpt below
+                  Upload PDF, Word, text, or HTML course materials
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
