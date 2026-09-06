@@ -45,7 +45,7 @@ export function BatchResponses({ responses }: { responses: BatchResponse[] }) {
   return (
     <div className="space-y-3 mt-4">
       <Separator />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Label className="text-sm font-medium">
           Generated Responses ({responses.length})
         </Label>
@@ -59,8 +59,8 @@ export function BatchResponses({ responses }: { responses: BatchResponse[] }) {
           key={`${item.name}-${index}`}
           className="p-3 rounded-lg border border-border/50 bg-background/30 space-y-2"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-primary">{item.name}</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="min-w-0 text-sm font-medium text-primary [overflow-wrap:anywhere]">{item.name}</span>
             <Button
               variant="outline"
               size="sm"
@@ -83,7 +83,7 @@ export function BatchResponses({ responses }: { responses: BatchResponse[] }) {
           <div className="text-xs text-muted-foreground line-clamp-2 italic">
             &quot;{item.post.substring(0, 140)}&hellip;&quot;
           </div>
-          <div className="text-sm whitespace-pre-wrap bg-background/50 p-3 rounded border">
+          <div className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere] bg-background/50 p-3 rounded border">
             {item.response}
           </div>
         </div>

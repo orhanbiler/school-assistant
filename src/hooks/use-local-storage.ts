@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type SetState<T> = (value: T | ((prev: T) => T)) => void;
 
-export function useLocalStorage<T>(key: string, initialValue: T): [T, SetState<T>, () => void] {
+export function useLocalStorage<T>(key: string, initialValue: T): [T, SetState<T>, () => void, "loading" | "saved" | "unavailable"] {
   const [value, setValue] = useState<T>(initialValue);
-  const isHydrated = useRef(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"loading" | "saved" | "unavailable">("loading");
 
   useEffect(() => {
     try {
@@ -17,18 +18,20 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, SetState<T
     } catch {
       // ignore corrupt JSON
     } finally {
-      isHydrated.current = true;
+      setHydrated(true);
     }
   }, [key]);
 
   useEffect(() => {
-    if (!isHydrated.current) return;
+    // Do not overwrite a saved draft with defaults during the initial render.
+    if (!hydrated) return;
     try {
       window.localStorage.setItem(key, JSON.stringify(value));
+      setSaveStatus("saved");
     } catch {
-      // quota exceeded — silently drop
+      setSaveStatus("unavailable");
     }
-  }, [key, value]);
+  }, [key, value, hydrated]);
 
   const remove = useCallback(() => {
     try {
@@ -40,5 +43,5 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, SetState<T
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return [value, setValue, remove];
+  return [value, setValue, remove, saveStatus];
 }

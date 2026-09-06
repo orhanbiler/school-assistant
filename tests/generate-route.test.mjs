@@ -139,6 +139,21 @@ test("Gemini receives separate system instructions and the same voice/context fi
   assert.equal(input.classmatePost, "The trial should continue.");
 });
 
+test("the user's own notes supply a draft direction for both providers", async () => {
+  const writerNotes = "I would try later library hours for two weeks, then review attendance.";
+  for (const aiModel of ["gpt-5.2", "gemini-2.5-pro"]) {
+    const result = await request({ type: "discussion", aiModel, writerNotes });
+    assert.equal(result.status, 200);
+    const call = calls.at(-1);
+    const input = userData(aiModel === "gpt-5.2" ? call.input[1].content : call.contents[0].parts[0].text);
+    assert.equal(input.writerNotes, writerNotes);
+  }
+  const before = calls.length, quotaBefore = quotaCalls.length;
+  assert.equal((await request({ type: "discussion", writerNotes: "x".repeat(4001) })).status, 413);
+  assert.equal(calls.length, before);
+  assert.equal(quotaCalls.length, quotaBefore);
+});
+
 test("revision restores the original bibliography even if the provider recreates one", async () => {
   reply = "A clearer draft (Lee, 2024).\n\nReferences\nAn unwanted replacement.";
   const references = "\r\n\r\n## References\r\nLee, A. (2024). Pilot. https://example.org/pilot\r\n";

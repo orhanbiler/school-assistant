@@ -40,7 +40,7 @@ import { DEFAULT_MODEL } from "@/lib/models";
 import { requestDraft, GenerationFailure } from "@/lib/generate-client";
 import { MAX_BATCH_POSTS } from "@/lib/request-limits";
 import { countWords } from "@/lib/text";
-import { getWritingTone, MAX_WRITING_SAMPLE_LENGTH, WRITING_TONES, type WritingTone } from "@/lib/writing-prompts";
+import { getWritingTone, MAX_WRITING_SAMPLE_LENGTH, MAX_WRITER_NOTES_LENGTH, WRITING_TONES, type WritingTone } from "@/lib/writing-prompts";
 
 const STORAGE_KEY = "scholarQuillData.v2";
 
@@ -50,11 +50,13 @@ interface PersistedState {
   pageCount: string;
   discussionPost: string;
   generatedContent: string;
+  previousDraft: string;
   activeTab: string;
   storedFiles: StoredFile[];
   aiModel: string;
   batchPosts: string;
   writingSample: string;
+  writerNotes: string;
   writingTone: WritingTone;
   originalPost: string;
   incomingReply: string;
@@ -69,11 +71,13 @@ const DEFAULT_STATE: PersistedState = {
   pageCount: "2",
   discussionPost: "",
   generatedContent: "",
+  previousDraft: "",
   activeTab: "discussion",
   storedFiles: [],
   aiModel: DEFAULT_MODEL,
   batchPosts: "",
   writingSample: "",
+  writerNotes: "",
   writingTone: "auto",
   originalPost: "",
   incomingReply: "",
@@ -119,7 +123,7 @@ export default function WritingWorkspace() {
       throw error;
     }
   }, [router]);
-  const [state, setState, clearStorage] = useLocalStorage<PersistedState>(
+  const [state, setState, clearStorage, saveStatus] = useLocalStorage<PersistedState>(
     STORAGE_KEY,
     DEFAULT_STATE,
   );
@@ -144,11 +148,13 @@ export default function WritingWorkspace() {
     pageCount,
     discussionPost,
     generatedContent,
+    previousDraft = "",
     activeTab,
     storedFiles,
     aiModel,
     batchPosts,
     writingSample = "",
+    writerNotes = "",
     writingTone = "auto",
     originalPost = "",
     incomingReply = "",
@@ -158,8 +164,8 @@ export default function WritingWorkspace() {
   } = state;
 
   const hasMaterial = useMemo(
-    () => Boolean(context.trim() || additionalInstructions.trim()) || storedFiles.length > 0,
-    [context, additionalInstructions, storedFiles.length],
+    () => Boolean(context.trim() || additionalInstructions.trim() || writerNotes.trim()) || storedFiles.length > 0,
+    [context, additionalInstructions, writerNotes, storedFiles.length],
   );
 
   const buildFormData = useCallback(() => {
@@ -169,6 +175,7 @@ export default function WritingWorkspace() {
     formData.append("additionalInstructions", additionalInstructions);
     formData.append("pageCount", pageCount);
     formData.append("writingSample", writingSample);
+    formData.append("writerNotes", writerNotes);
     formData.append("writingTone", writingTone);
     formData.append("fileSources", JSON.stringify(storedFiles.map((sf) => ({
       filename: sf.name,
@@ -181,7 +188,16 @@ export default function WritingWorkspace() {
       if (sf.text === undefined) formData.append("files", storedFileToFile(sf));
     }
     return formData;
-  }, [aiModel, context, additionalInstructions, pageCount, writingSample, writingTone, storedFiles]);
+  }, [aiModel, context, additionalInstructions, pageCount, writingSample, writerNotes, writingTone, storedFiles]);
+
+  const acceptDraft = useCallback((content: string) => {
+    setState((previous) => ({ ...previous, previousDraft: previous.generatedContent, generatedContent: content }));
+    requestAnimationFrame(() => {
+      if (window.matchMedia("(max-width: 1023px)").matches) {
+        document.getElementById("draft")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+      }
+    });
+  }, [setState]);
 
   const generate = useCallback(
     async (type: "discussion" | "paper" | "response" | "followup") => {
@@ -202,7 +218,7 @@ export default function WritingWorkspace() {
 
         const data = await generateRequest(formData);
 
-        set("generatedContent", data.content);
+        acceptDraft(data.content);
         if (type === "discussion") set("originalPost", data.content);
         toast.success("Content generated", {
           description: `${countWords(data.content)} words ready for review`,
@@ -226,18 +242,20 @@ export default function WritingWorkspace() {
       recipientRole,
       conversationHistory,
       set,
+      acceptDraft,
     ],
   );
 
-  const handleRevise = useCallback(async () => {
+  const handleRevise = useCallback(async (instructions = "") => {
     if (!generatedContent || isRevising || isLoading) return;
     setIsRevising(true);
     try {
       const formData = buildFormData();
       formData.append("type", "revise");
       formData.append("contentToRevise", generatedContent);
+      formData.set("additionalInstructions", instructions);
       const data = await generateRequest(formData);
-      set("generatedContent", data.content);
+      acceptDraft(data.content);
       toast.success("Writing refined");
     } catch (error) {
       toast.error("Could not refine writing", {
@@ -246,7 +264,7 @@ export default function WritingWorkspace() {
     } finally {
       setIsRevising(false);
     }
-  }, [generatedContent, isRevising, isLoading, buildFormData, generateRequest, set]);
+  }, [generatedContent, isRevising, isLoading, buildFormData, generateRequest, acceptDraft]);
 
   const handleBatchGenerate = useCallback(async () => {
     if (isLoading || isRevising) return;
@@ -339,18 +357,26 @@ export default function WritingWorkspace() {
   const batchCount = useMemo(() => parseBatchPosts(batchPosts).length, [batchPosts]);
 
   return (
-    <main className="min-h-screen bg-pattern">
+    <main className="min-h-dvh bg-pattern">
       <AppHeader
         aiModel={aiModel}
         onModelChange={(v) => set("aiModel", v)}
         onClearAll={onClearAll}
       />
 
-      <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <div className="grid lg:grid-cols-2 gap-6 lg:gap-8">
+      <nav aria-label="Workspace sections" className="mobile-section-nav sticky top-0 z-40 grid grid-cols-3 border-b border-border bg-background/95 backdrop-blur lg:hidden">
+        <a href="#materials">Materials</a>
+        <a href="#writing">Write</a>
+        <a href="#draft">My draft</a>
+      </nav>
+      <div className="workspace-container container mx-auto px-3 sm:px-6 py-4 sm:py-8">
+        <p role="status" className={`mb-4 text-xs ${saveStatus === "unavailable" ? "text-destructive" : "text-muted-foreground"}`}>
+          {saveStatus === "loading" ? "Opening your workspace…" : saveStatus === "saved" ? "Saved on this device" : "Device storage is unavailable. Copy or download your draft before leaving."}
+        </p>
+        <div className="grid min-w-0 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
           {/* Left Column - Input */}
-          <div className="space-y-6 animate-fade-in">
-            <Card className="glass border-border/50">
+          <div className="min-w-0 space-y-4 sm:space-y-6 animate-fade-in">
+            <Card id="materials" className="workspace-section glass border-border/50">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <Upload className="w-5 h-5 text-primary" />
@@ -400,14 +426,19 @@ export default function WritingWorkspace() {
               </CardContent>
             </Card>
 
-            <Card className="glass border-border/50">
+            <Card id="writing" className="workspace-section glass border-border/50">
               <CardHeader>
-                <CardTitle className="text-xl">Your Writing Voice</CardTitle>
+                <CardTitle className="text-xl">Your Voice &amp; Ideas</CardTitle>
                 <CardDescription>
-                  Guide the voice for drafts, revisions, and replies.
+                  Give the draft your direction and a voice that fits.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="writer-notes">What I want to say (optional)</Label>
+                  <Textarea id="writer-notes" value={writerNotes} maxLength={MAX_WRITER_NOTES_LENGTH} onChange={(event) => set("writerNotes", event.target.value)} className="min-h-28 bg-background/50" placeholder="My main point is… The reason I think this is… A detail or example I want to include is…" aria-describedby="writer-notes-help" />
+                  <p id="writer-notes-help" className="text-xs text-muted-foreground">A few rough sentences in your own words help the draft express your reasoning. Include only experiences and facts you want to use.</p>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="writing-tone">Tone</Label>
                   <Select value={writingTone} onValueChange={(value) => set("writingTone", getWritingTone(value))}>
@@ -440,7 +471,7 @@ export default function WritingWorkspace() {
               </CardContent>
             </Card>
 
-            <Card className="glass border-border/50 animate-fade-in stagger-2">
+            <Card id="format" className="workspace-section glass border-border/50 animate-fade-in stagger-2">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <Sparkles className="w-5 h-5 text-primary" />
@@ -454,26 +485,26 @@ export default function WritingWorkspace() {
                   onValueChange={(v) => set("activeTab", v)}
                   className="w-full"
                 >
-                  <TabsList className="grid w-full grid-cols-5 mb-6">
-                    <TabsTrigger value="discussion" aria-label="Discussion" className="flex items-center gap-2">
+                  <TabsList aria-label="Writing format" className="grid h-auto w-full grid-cols-3 gap-1 sm:grid-cols-5 mb-4">
+                    <TabsTrigger value="discussion" aria-label="Discussion" className="min-w-0 min-h-14 flex flex-col items-center gap-1 px-1 text-xs">
                       <MessageSquare className="w-4 h-4" />
-                      <span className="hidden sm:inline">Discussion</span>
+                      <span className="block">Discussion</span>
                     </TabsTrigger>
-                    <TabsTrigger value="paper" aria-label="Paper" className="flex items-center gap-2">
+                    <TabsTrigger value="paper" aria-label="Paper" className="min-w-0 min-h-14 flex flex-col items-center gap-1 px-1 text-xs">
                       <BookOpen className="w-4 h-4" />
-                      <span className="hidden sm:inline">Paper</span>
+                      <span className="block">Paper</span>
                     </TabsTrigger>
-                    <TabsTrigger value="response" aria-label="Response" className="flex items-center gap-2">
+                    <TabsTrigger value="response" aria-label="Response" className="min-w-0 min-h-14 flex flex-col items-center gap-1 px-1 text-xs">
                       <Reply className="w-4 h-4" />
-                      <span className="hidden sm:inline">Response</span>
+                      <span className="block">Response</span>
                     </TabsTrigger>
-                    <TabsTrigger value="followup" aria-label="My Thread" className="flex items-center gap-2">
+                    <TabsTrigger value="followup" aria-label="My Thread" className="min-w-0 min-h-14 flex flex-col items-center gap-1 px-1 text-xs">
                       <MessageSquare className="w-4 h-4" />
-                      <span className="hidden sm:inline">My Thread</span>
+                      <span className="block">My Thread</span>
                     </TabsTrigger>
-                    <TabsTrigger value="batch" aria-label="Batch" className="flex items-center gap-2">
+                    <TabsTrigger value="batch" aria-label="Batch" className="min-w-0 min-h-14 flex flex-col items-center gap-1 px-1 text-xs">
                       <Users className="w-4 h-4" />
-                      <span className="hidden sm:inline">Batch</span>
+                      <span className="block">Batch</span>
                     </TabsTrigger>
                   </TabsList>
 
@@ -585,7 +616,7 @@ export default function WritingWorkspace() {
                       description="Continue the conversation when a student or your professor replies to your post."
                     />
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <Label htmlFor="my-original-post">My original discussion post *</Label>
                         <Button type="button" size="sm" variant="ghost" disabled={!generatedContent || isLoading || isRevising} onClick={() => set("originalPost", generatedContent)}>
                           Use current draft
@@ -702,7 +733,7 @@ Your report is well written...`}
           </div>
 
           {/* Right Column - Output */}
-          <div className="lg:sticky lg:top-[100px] lg:self-start lg:max-h-[calc(100vh-120px)]">
+          <div id="draft" className="workspace-section min-w-0 lg:sticky lg:top-[110px] lg:self-start">
             <GeneratedOutput
               content={generatedContent}
               isLoading={isLoading && activeTab !== "batch"}
@@ -710,17 +741,20 @@ Your report is well written...`}
               reviseDisabled={isLoading}
               onRevise={handleRevise}
               onDownload={handleDownload}
+              onEdit={(content) => set("generatedContent", content)}
+              canRestore={Boolean(previousDraft)}
+              onRestore={() => setState((previous) => ({ ...previous, generatedContent: previous.previousDraft, previousDraft: previous.generatedContent }))}
             />
           </div>
         </div>
 
-        <footer className="mt-12 text-center text-sm text-muted-foreground">
+        <footer className="mt-8 text-center text-sm text-muted-foreground">
           <p>
-            Crafted with care for authentic academic expression &middot;{" "}
+            Review your ideas, sources, and final wording.{" "}<span className="hidden lg:inline">&middot;{" "}
             <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-mono">
               ⌘ Enter
             </kbd>{" "}
-            to generate
+            to generate</span>
           </p>
         </footer>
       </div>

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ModelSelect } from "./model-select";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { InstallApp } from "./install-app";
 
 interface AppHeaderProps {
   aiModel: string;
@@ -42,9 +43,9 @@ export function AppHeader({ aiModel, onModelChange, onClearAll }: AppHeaderProps
     finally { setSigningOut(false); }
   }
   return (
-    <header className="border-b border-border/50 glass sticky top-0 z-50">
+    <header className="app-header border-b border-border/50 glass relative lg:sticky top-0 z-40">
       <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10 ring-1 ring-primary/10">
               <Feather className="w-6 h-6 text-primary" />
@@ -58,7 +59,7 @@ export function AppHeader({ aiModel, onModelChange, onClearAll }: AppHeaderProps
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 justify-between sm:justify-end">
             <div className="hidden md:flex items-center gap-2">
               <Label
                 htmlFor="model-select"
@@ -67,11 +68,13 @@ export function AppHeader({ aiModel, onModelChange, onClearAll }: AppHeaderProps
                 Model:
               </Label>
               <ModelSelect
+                id="model-select"
                 value={aiModel}
                 onValueChange={onModelChange}
                 className="h-9 min-w-[180px]"
               />
             </div>
+            <InstallApp />
             <ThemeToggle />
             <Button variant="outline" size="sm" aria-label="Sign out" disabled={signingOut} onClick={signOut}>
               <LogOut className="w-4 h-4" />
@@ -127,9 +130,10 @@ export function AppHeader({ aiModel, onModelChange, onClearAll }: AppHeaderProps
             Model:
           </Label>
           <ModelSelect
+            id="model-select-mobile"
             value={aiModel}
             onValueChange={onModelChange}
-            className="h-9 flex-1"
+            className="min-w-0 h-auto min-h-12 flex-1"
           />
         </div>
       </div>

@@ -24,7 +24,7 @@ export function SignInForm() {
     } catch { setError("Sign-in is temporarily unavailable. Please try again."); }
     finally { setBusy(false); }
   }}>
-    <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" name="email" type="email" autoComplete="username" required maxLength={254} disabled={busy} /></div>
+    <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" name="email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" autoComplete="username" required maxLength={254} disabled={busy} /></div>
     <div className="space-y-2"><Label htmlFor="password">Password</Label><Input id="password" name="password" type="password" autoComplete="current-password" required maxLength={1024} disabled={busy} /></div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <Button type="submit" className="w-full" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</Button>

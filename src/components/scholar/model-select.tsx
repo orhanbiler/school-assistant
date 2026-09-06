@@ -17,6 +17,7 @@ interface ModelSelectProps {
   value: string;
   onValueChange: (value: string) => void;
   className?: string;
+  id?: string;
 }
 
 const providerIcons: Record<string, React.ReactNode> = {
@@ -24,7 +25,7 @@ const providerIcons: Record<string, React.ReactNode> = {
   Google: <Bot className="size-3.5 text-sky-500" />,
 };
 
-export function ModelSelect({ value, onValueChange, className }: ModelSelectProps) {
+export function ModelSelect({ value, onValueChange, className, id }: ModelSelectProps) {
   const grouped = MODELS.reduce<Record<string, typeof MODELS>>((acc, m) => {
     (acc[m.provider] ??= []).push(m);
     return acc;
@@ -32,10 +33,10 @@ export function ModelSelect({ value, onValueChange, className }: ModelSelectProp
 
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger className={className} aria-label="Select AI model">
-        <SelectValue placeholder="Select a model" />
+      <SelectTrigger id={id} className={className} aria-label="Select AI model">
+        <SelectValue placeholder="Select a model">{MODELS.find((model) => model.id === value)?.label}</SelectValue>
       </SelectTrigger>
-      <SelectContent position="popper">
+      <SelectContent position="popper" className="max-w-[calc(100vw-1.5rem)]">
         {Object.entries(grouped).map(([provider, models], idx) => (
           <SelectGroup key={provider}>
             {idx > 0 && <SelectSeparator />}

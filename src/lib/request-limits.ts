@@ -19,6 +19,7 @@ export const TEXT_FIELD_LIMITS: Record<string, number> = {
   recipientName: 120,
   contentToRevise: 24_000,
   writingSample: 6000,
+  writerNotes: 4000,
   writingTone: 30,
   fileSources: 3000,
   extractedMaterials: 60_000,

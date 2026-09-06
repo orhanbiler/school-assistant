@@ -9,6 +9,7 @@ export const WRITING_TONES = [
 
 export type WritingTone = (typeof WRITING_TONES)[number]["id"];
 export const MAX_WRITING_SAMPLE_LENGTH = 6000;
+export const MAX_WRITER_NOTES_LENGTH = 4000;
 
 export function isGenerationType(value: string): value is GenerationType {
   return ["discussion", "paper", "response", "followup", "revise"].includes(value);
@@ -31,6 +32,7 @@ interface WritingPromptOptions {
   conversationHistory?: string;
   contentToRevise?: string;
   writingSample?: string;
+  writerNotes?: string;
   writingTone?: WritingTone;
   materials?: { filename: string; text: string; sourceUrl?: string }[];
 }
@@ -40,7 +42,9 @@ const WRITING_INSTRUCTIONS = `You help the user draft and edit writing that is s
 WRITING QUALITY
 - Let the assignment, audience, and ideas determine the structure. Follow explicit requirements for genre, length, tone, and formatting over the defaults below.
 - Develop a focused point of view with reasons and relevant details from the supplied material. Explain what a detail means for the argument instead of filling space with broad claims about importance.
+- If writerNotes are supplied, build the draft around the user's main point, reasoning, and relevant details. Preserve their degree of agreement or uncertainty. These notes are a starting point, not permission to invent experiences or evidence. In a revision, the existing draft remains the source of its claims.
 - Choose precise, familiar words. Keep necessary technical vocabulary. Use transitions when the connection needs explaining, rather than repeating stock linking phrases.
+- Name who does what and explain the practical consequence. Avoid strings of abstract concepts where a concrete action would say more. Use a contrast only when the distinction is necessary; repeated "not just X, but Y" constructions can obscure the point.
 - Let sentence and paragraph lengths vary with the ideas. Read for flow; avoid repeated openings, identical paragraph patterns, generic praise, and conclusions that merely repeat the introduction.
 - Keep grammar sound. Do not manufacture typos, awkward phrasing, slang, fragments, or punctuation quirks to simulate a person. Do not ban ordinary words or force sentence patterns.
 - Use first person only when the genre allows it. Never invent the user's experiences, identity, opinions, credentials, or observations. Use a supplied perspective when available; label invented illustrative scenarios as hypothetical. Explicitly requested fiction may contain invented details.
@@ -72,13 +76,18 @@ function taskInstructions(options: WritingPromptOptions): string {
       return `Write an academic paper. Default target: approximately ${pages * 275} words (${pages} pages at 275 words per page), excluding references. An explicit word count or requested genre such as an essay or passage in the assignment takes precedence. Establish a focused thesis, develop connected reasoning with evidence, and end with an implication or synthesis. Use headings only when the assignment or length warrants them; do not force a five-paragraph template.`;
     }
     case "response":
-      return `Reply to the supplied classmate's post. Default to 150–250 words unless instructed otherwise. Engage with one or two specific points and add reasoning, a useful connection, or a respectful challenge. Ask a question only if it advances the discussion. Use a brief greeting only if the recipient's name is actually supplied; never guess a name. Avoid automatic praise, a point-by-point paraphrase of the entire post, and a fixed response template.`;
+      return `Reply to the supplied classmate's post. Default to 150–250 words unless instructed otherwise. Engage with one or two specific points and add reasoning, a useful connection, or a respectful challenge. Use a brief greeting only if the recipient's name is actually supplied; never guess a name. ${REPLY_GUIDANCE}`;
     case "followup":
-      return `Write a follow-up reply under the user's own discussion post. The user wrote originalPost; incomingReply was written by the ${options.recipientRole === "professor" ? "professor" : "other student"}. Reply as the original author to that incoming message, taking any earlier conversation into account. Default to 100–200 words unless instructed otherwise. Answer their actual questions, acknowledge a useful correction when warranted, and explain or extend the user's point without simply repeating the original post. Do not confuse who wrote each message or write a review of the user's own post. ${options.recipientRole === "professor" ? "Use a respectful, direct tone with the professor. Address feedback substantively without excessive deference, flattery, or invented promises." : "Use a collegial, engaged tone with the other student."} Use a greeting only if a name is provided, retaining any supplied title without guessing a title or gender. Do not invent personal experience, agreement, evidence, or citations. End when the response is complete; a question is optional.`;
+      return `Write a follow-up reply under the user's own discussion post. The user wrote originalPost; incomingReply was written by the ${options.recipientRole === "professor" ? "professor" : "other student"}. Reply as the original author to that incoming message, taking any earlier conversation into account. Default to 100–200 words unless instructed otherwise. Answer their actual questions, acknowledge a useful correction when warranted, and explain or extend the user's point without simply repeating the original post. Do not confuse who wrote each message or write a review of the user's own post. ${options.recipientRole === "professor" ? "Use a respectful, direct tone with the professor. Address feedback substantively without excessive deference, flattery, or invented promises." : "Use a collegial, engaged tone with the other student."} Use a greeting only if a name is provided, retaining any supplied title without guessing a title or gender. Do not invent personal experience, agreement, evidence, or citations. ${REPLY_GUIDANCE}`;
     case "revise":
-      return `Edit the supplied draft for clarity, specificity, flow, and the requested voice. Preserve its genre, argument, factual claims, degree of certainty, quotations, in-text citations, and approximately the same length unless the user explicitly requests a change. Preserve the original register when no different tone is selected. Do not add new evidence, experiences, rhetorical questions, or claims. Improve only passages that need work; retain strong sentences. A trailing reference list is held separately and will be restored unchanged: do not output or recreate it. Return only the revised body.`;
+      return `Make a light edit of the supplied draft for clarity, specificity, flow, and the requested voice. Preserve its genre, argument, factual claims, degree of certainty, quotations, in-text citations, and approximately the same length unless the user explicitly requests a change. Preserve the original register when no different tone is selected. Do not add new evidence, experiences, rhetorical questions, or claims. Keep the user's own phrasing wherever it already works. Remove empty compliments and stock transitions if they add no meaning; replace abstract phrasing with a clear action only when that action is supported by the draft. A trailing reference list is held separately and will be restored unchanged: do not output or recreate it. Return only the revised body.`;
   }
 }
+
+const REPLY_GUIDANCE = `Start the substance with the point being discussed or the user's answer. Skip a generic thank-you or evaluation of how thoughtful the post was. Follow a useful detail through to its consequence instead of restating the reading in new terms. End with the completed thought; add a question only if the assignment requires one or there is a specific unresolved issue the recipient can help answer. Do not use praise, paraphrase, and question as a fixed template.
+Style examples, not facts or wording to reuse:
+- If a classmate asks who would staff later library hours, a direct opening could be: "The staffing cost is the part I would want to work out first. Extending the hours would also mean paying someone to cover them."
+- If the user's notes propose a small trial but a professor asks about weak evidence, a direct response could be: "The survey alone would not show whether the trial worked. I would compare actual attendance during the trial with attendance before it." Adapt length, evidence, and voice to the actual task.`;
 
 // Keep bibliographies out of the model's rewrite so their contents stay verbatim.
 export function splitReferenceSection(content: string): { body: string; references: string } {
@@ -98,6 +107,7 @@ export function buildWritingPrompts(options: WritingPromptOptions) {
     assignmentContext: options.context?.trim() || undefined,
     additionalInstructions: options.additionalInstructions?.trim() || undefined,
     writingSample: options.writingSample?.trim() || undefined,
+    writerNotes: options.writerNotes?.trim() || undefined,
     materials: options.materials?.length ? options.materials : undefined,
     classmatePost: options.type === "response" ? options.discussionPost : undefined,
     recipientName: ["response", "followup"].includes(options.type) ? options.recipientName?.trim() || undefined : undefined,

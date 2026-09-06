@@ -90,6 +90,7 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
     const discussionPost = textField(formData, "discussionPost");
     const contentToRevise = textField(formData, "contentToRevise");
     const writingSample = textField(formData, "writingSample");
+    const writerNotes = textField(formData, "writerNotes");
     const originalPost = textField(formData, "originalPost");
     const incomingReply = textField(formData, "incomingReply");
     const recipientRole = textField(formData, "recipientRole") || "student";
@@ -171,7 +172,7 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
     }
 
     if ((type === "discussion" || type === "paper") &&
-        !context.trim() && !additionalInstructions.trim() && materials.length === 0) {
+        !context.trim() && !additionalInstructions.trim() && !writerNotes.trim() && materials.length === 0) {
       return json({ error: "Add a topic, instructions, or source material first." }, { status: 400 });
     }
 
@@ -188,6 +189,7 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
       conversationHistory: textField(formData, "conversationHistory"),
       contentToRevise,
       writingSample,
+      writerNotes,
       writingTone: getWritingTone(textField(formData, "writingTone")),
       materials,
     });

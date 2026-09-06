@@ -1,8 +1,10 @@
 # Reviewing writing quality
 
-The generator uses one model request with a final editorial check in the prompt. Voice settings and an optional writing sample apply to initial drafts, individual replies, batch replies, and revision. The sample supplies style, not facts or citations. Revision holds a trailing References, Works Cited, or Bibliography section outside the model and restores it verbatim.
+The generator uses one model request with a final editorial check in the prompt. Voice settings, an optional writing sample, and **What I want to say** notes apply to initial drafts, individual replies, batch replies, and revision. The sample supplies style, not facts or citations. The notes supply the writer's actual point, reasoning, and relevant details. Revision treats the draft as authoritative and holds a trailing References, Works Cited, or Bibliography section outside the model, restoring it verbatim.
 
-The prompts intentionally avoid fixed sample answers, forced errors, word blacklists, and detector-score guarantees. A detector score is not a quality acceptance criterion. Prompt instructions improve guidance; they cannot guarantee factual fidelity or a particular voice. Read the result before using it.
+Reply guidance encourages a substantive opening, a specific detail, and an ending that completes the thought. Short fictional examples illustrate this approach without prescribing an answer template. A closing question is appropriate when required or when it addresses a real unresolved issue. The prompts avoid forced errors and detector-score guarantees. A detector score is not a quality acceptance criterion. Prompt instructions improve guidance; they cannot guarantee factual fidelity or a particular voice. Read the result before using it.
+
+**My draft → Edit** lets the writer make changes directly, with no AI request. Edits save on the current device. **Light edit with AI** accepts separate revision instructions and keeps the previous draft available to restore. Copy, download, and supported native sharing use the currently edited text. These controls make the writer's review part of the workflow.
 
 ## Repeatable manual review
 
@@ -14,6 +16,7 @@ Use the same selected model and inputs before and after a prompt change. Generat
 4. **Reply and batch replies.** Use two posts taking different positions on the trial. Provide a name for one and leave the other unnamed. Check that each reply engages with a different specific point, avoids repeated praise/templates, and does not invent a recipient or references.
 5. **Revision.** Supply a draft containing a direct quote, a cautious claim (“may improve”), a number, an in-text citation, and a Markdown References section. Check that meaning, quotation, certainty, number, and citation survive; the bibliography must remain byte-for-byte identical. Try an already clear draft: the editor should not gratuitously rewrite it.
 6. **Source documents.** Upload a PDF and a Word (.docx) document, review the extracted text, and select a short PDF page range. Only that selection should appear in the draft's material. Try a scanned or damaged PDF, an older .doc file, and an empty TXT file; each should explain the problem before calling a model. A pasted URL alone must not be described as a source the model has read.
+7. **Writer's notes and editing.** Use only **What I want to say** to supply a position and a reason. Generate a draft, make a manual edit, and reload. The edit should survive. Add a light-edit instruction, revise, then restore the previous draft. Confirm the manual wording and references return exactly. This workflow can be tested with a synthetic provider; judging prose quality requires a live model and human review.
 
 Score each output 1–5 for assignment fit, natural flow, specific reasoning, source fidelity, and voice fit. Reject any output with invented evidence, altered quotations, or missed mandatory requirements regardless of its average. Record word count separately. Automated prompt and request tests verify wiring and preservation, not prose quality or detector performance.
 

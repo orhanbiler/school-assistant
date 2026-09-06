@@ -21,10 +21,17 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Scholar's Quill | Academic Writing Assistant",
-  description: "Your intelligent companion for crafting authentic academic content",
+  description: "Your private workspace for drafting, editing, and discussing course material.",
+  applicationName: "Scholar's Quill",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Scholar's Quill" },
+  icons: { apple: "/icons/quill-180.png" },
 };
 
 export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#fafaf7" },
     { media: "(prefers-color-scheme: dark)", color: "#0c0e15" },
@@ -39,7 +46,7 @@ export default async function RootLayout({
   const nonce = (await headers()).get("x-nonce") || undefined;
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${crimsonPro.variable} ${jetbrainsMono.variable} min-h-screen antialiased`}>
+      <body className={`${crimsonPro.variable} ${jetbrainsMono.variable} min-h-dvh antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange nonce={nonce}>
           <TooltipProvider delayDuration={150}>
             {children}
