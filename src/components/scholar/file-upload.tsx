@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { MAX_FILE_BYTES, MAX_FILES } from "@/lib/request-limits";
 
 export interface StoredFile {
   name: string;
@@ -24,8 +25,7 @@ interface FileUploadProps {
   onUpdateSource: (index: number, url: string) => void;
 }
 
-const ACCEPTED = ".pdf,.txt,.doc,.docx,.html,.htm";
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
+const ACCEPTED = ".txt,.html,.htm";
 
 function fileToStored(file: File): Promise<StoredFile> {
   return new Promise((resolve, reject) => {
@@ -52,9 +52,19 @@ export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource }: Fil
   const ingest = useCallback(
     async (fileList: FileList | File[]) => {
       const files = Array.from(fileList);
+      if (files.length + storedFiles.length > MAX_FILES) {
+        toast.error(`Upload at most ${MAX_FILES} files. Keep only the relevant excerpts.`);
+        return;
+      }
       const valid = files.filter((f) => {
+        if (!/\.(txt|html?)$/i.test(f.name)) {
+          toast.error(`Cannot read ${f.name}`, {
+            description: "Paste PDF or Word text into Additional Context, or upload TXT or HTML.",
+          });
+          return false;
+        }
         if (f.size > MAX_FILE_BYTES) {
-          toast.error(`${f.name} is too large`, { description: "Max 10 MB per file." });
+          toast.error(`${f.name} is too large`, { description: "Max 128 KB per file. Upload a short excerpt." });
           return false;
         }
         return true;
@@ -69,7 +79,7 @@ export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource }: Fil
         toast.error("Could not read one or more files");
       }
     },
-    [onAdd],
+    [onAdd, storedFiles.length],
   );
 
   return (
@@ -124,9 +134,14 @@ export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource }: Fil
           {isDragging ? "Release to upload" : "Drop files here or click to browse"}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          PDF, TXT, DOC, DOCX, HTML &middot; up to 10 MB each
+          TXT, HTML &middot; up to 3 files, 128 KB each
         </p>
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        For PDF or Word documents, paste the relevant text into Additional Context.
+        Source URLs are used for citations; linked pages are not fetched.
+      </p>
 
       {storedFiles.length > 0 && (
         <div className="space-y-3">

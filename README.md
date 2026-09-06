@@ -1,18 +1,28 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Private access and replies
+
+The workspace and AI endpoint require a precreated Supabase email/password account matching the owner's email and user ID. Disable public signup in Supabase. Generation also requires the protected Supabase usage functions and an explicit enable switch; missing configuration keeps generation locked. Follow the [private Vercel deployment guide](docs/private-deployment.md) before deploying.
+
+Use **My Thread** to reply to a student or professor under your own discussion post. Add your original post, choose who replied, paste their message, and optionally include earlier replies. New discussion drafts are copied into the original-post field automatically; replace this with the version you actually posted when needed.
+
+## Writing voice and quality
+
+Use **Your Writing Voice** to choose a tone and optionally paste a short sample of your own writing. These settings apply to drafts, revisions, and batch replies. Add your perspective and relevant source excerpts in Additional Context. Upload TXT or HTML files; paste text from PDF or Word documents.
+
+**Refine Writing** edits for clarity and flow while preserving the draft's meaning and restoring its reference list unchanged. See the [writing quality review guide](docs/writing-quality.md) for repeatable examples and validation steps. The app does not guarantee detector scores.
+
 ## Getting Started
 
-First, run the development server:
+Use the pinned pnpm version from `package.json` (10.34.5). Complete the private setup above and configure `.env.local`, then run:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+corepack enable
+pnpm install --frozen-lockfile
 pnpm dev
-# or
-bun dev
 ```
+
+Commit `package.json` and `pnpm-lock.yaml` together after dependency changes. If you use npm to update dependencies, run `pnpm import` and verify a frozen pnpm install before deploying, because Vercel detects the pnpm lockfile.
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 

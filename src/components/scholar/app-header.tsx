@@ -1,6 +1,8 @@
 "use client";
 
-import { Feather, RotateCcw } from "lucide-react";
+import { Feather, LogOut, RotateCcw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,18 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ aiModel, onModelChange, onClearAll }: AppHeaderProps) {
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
+  async function signOut() {
+    setSigningOut(true);
+    try {
+      const response = await fetch("/api/auth/sign-out", { method: "POST", headers: { "X-Scholar-Request": "1" } });
+      if (!response.ok) throw new Error();
+      router.replace("/login");
+      router.refresh();
+    } catch { toast.error("Sign-out failed. Please try again."); }
+    finally { setSigningOut(false); }
+  }
   return (
     <header className="border-b border-border/50 glass sticky top-0 z-50">
       <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
@@ -59,6 +73,10 @@ export function AppHeader({ aiModel, onModelChange, onClearAll }: AppHeaderProps
               />
             </div>
             <ThemeToggle />
+            <Button variant="outline" size="sm" aria-label="Sign out" disabled={signingOut} onClick={signOut}>
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sign out</span>
+            </Button>
             <AlertDialog>
               <Tooltip>
                 <TooltipTrigger asChild>

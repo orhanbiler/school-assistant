@@ -33,6 +33,7 @@ interface GeneratedOutputProps {
   content: string;
   isLoading: boolean;
   isRevising: boolean;
+  reviseDisabled?: boolean;
   onRevise: () => void;
   onDownload: () => void;
 }
@@ -41,6 +42,7 @@ export function GeneratedOutput({
   content,
   isLoading,
   isRevising,
+  reviseDisabled = false,
   onRevise,
   onDownload,
 }: GeneratedOutputProps) {
@@ -78,7 +80,7 @@ export function GeneratedOutput({
               Generated Content
             </CardTitle>
             <CardDescription>
-              Your authentic, human-like content will appear here
+              Review your draft for voice, accuracy, and assignment requirements
             </CardDescription>
           </div>
           {content && !isLoading && (
@@ -89,7 +91,7 @@ export function GeneratedOutput({
                     variant="outline"
                     size="sm"
                     onClick={onRevise}
-                    disabled={isRevising}
+                    disabled={isRevising || reviseDisabled}
                     className="flex items-center gap-2"
                   >
                     {isRevising ? (
@@ -100,12 +102,12 @@ export function GeneratedOutput({
                     ) : (
                       <>
                         <Sparkles className="w-4 h-4" />
-                        Humanize
+                        Refine Writing
                       </>
                     )}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Re-write to bypass AI detectors</TooltipContent>
+                <TooltipContent>Improve clarity and flow using your voice settings</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -179,7 +181,10 @@ export function GeneratedOutput({
             <TabsContent value="rendered" className="flex-1 min-h-0 mt-0">
               <ScrollArea className="h-full rounded-lg border border-border/50 bg-background/30">
                 <article className="prose prose-neutral dark:prose-invert max-w-none p-6 prose-p:leading-relaxed prose-headings:font-semibold prose-pre:bg-muted/50">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+                    img: () => null,
+                    a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
+                  }}>
                     {content}
                   </ReactMarkdown>
                 </article>
@@ -215,7 +220,7 @@ function LoadingSkeleton() {
           <div className="absolute top-0 left-0 w-14 h-14 border-4 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
         <p className="mt-4 text-sm text-muted-foreground animate-pulse-subtle">
-          Crafting authentic content&hellip;
+          Drafting your content&hellip;
         </p>
       </div>
       <div className="space-y-3 mt-4">

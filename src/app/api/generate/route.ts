@@ -1,9 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { DEFAULT_MODEL, findModel } from "@/lib/models";
+import { createRequestAuth } from "@/lib/server/supabase";
+import { getAccessConfig } from "@/lib/server/access-config";
+import { isSameOriginRequest } from "@/lib/server/authorization";
+import { readGenerationForm, RequestError } from "@/lib/server/request-body";
+import { getMaxOutputTokens, reserveGeneration, UsageError } from "@/lib/server/usage-limits";
+import { MAX_FILES, MAX_FILE_BYTES, MAX_PROMPT_BYTES, PROVIDER_TIMEOUT_MS } from "@/lib/request-limits";
+import {
+  buildWritingPrompts,
+  getWritingTone,
+  isGenerationType,
+  MAX_WRITING_SAMPLE_LENGTH,
+  splitReferenceSection,
+} from "@/lib/writing-prompts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 75;
+
+function json(data: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers);
+  headers.set("Cache-Control", "no-store, private");
+  headers.set("Vary", "Cookie");
+  return NextResponse.json(data, { ...init, headers });
+}
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -11,7 +33,7 @@ function getOpenAI(): OpenAI {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error("OPENAI_API_KEY is not set");
     }
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 0, timeout: PROVIDER_TIMEOUT_MS });
   }
   return _openai;
 }
@@ -27,322 +49,198 @@ function getGemini(): GoogleGenerativeAI {
   return _gemini;
 }
 
-const HUMANIZATION_INSTRUCTIONS = `You are Orhan, a college student. Write short casual responses.`;
-
 interface FileSource {
   filename: string;
   sourceUrl: string;
 }
 
+function textField(formData: FormData, name: string): string {
+  const value = formData.get(name);
+  return typeof value === "string" ? value : "";
+}
+
 export async function POST(request: NextRequest) {
+  if (!getAccessConfig().ready) return json({ error: "Private access is not configured. Generation is locked." }, { status: 503 });
+  const auth = createRequestAuth(request);
+  return auth.applyCookies(await generate(request, auth));
+}
+
+async function generate(request: Request, auth: ReturnType<typeof createRequestAuth>) {
+  let release: (() => Promise<void>) | undefined;
   try {
-    const formData = await request.formData();
-    const type = formData.get("type") as string;
-    const aiModel = formData.get("aiModel") as string || "gpt-5.2";
-    const context = formData.get("context") as string;
-    const additionalInstructions = formData.get("additionalInstructions") as string;
-    const pageCount = formData.get("pageCount") as string;
-    const discussionPost = formData.get("discussionPost") as string;
-    const contentToRevise = formData.get("contentToRevise") as string;
-    const fileSourcesJson = formData.get("fileSources") as string;
-    const files = formData.getAll("files") as File[];
-    
-    // Parse file sources
+    if (!getAccessConfig().ready) return json({ error: "Private access is not configured. Generation is locked." }, { status: 503 });
+    if (!(await auth.hasOwnerSession())) return json({ error: "Sign in with the owner's approved account to continue." }, { status: 401 });
+    if (!isSameOriginRequest(request)) return json({ error: "This request is not allowed." }, { status: 403 });
+    const formData = await readGenerationForm(request);
+    const type = textField(formData, "type");
+    if (!isGenerationType(type)) {
+      return json({ error: "Invalid generation type" }, { status: 400 });
+    }
+
+    const aiModel = textField(formData, "aiModel") || DEFAULT_MODEL;
+    if (!findModel(aiModel)) {
+      return json({ error: "Please select a supported model." }, { status: 400 });
+    }
+
+    const context = textField(formData, "context");
+    const allowedModels = process.env.AI_ALLOWED_MODELS?.split(",").map((value) => value.trim()).filter(Boolean);
+    if (allowedModels && !allowedModels.includes(aiModel)) return json({ error: "This model is disabled by the owner." }, { status: 403 });
+    const additionalInstructions = textField(formData, "additionalInstructions");
+    const discussionPost = textField(formData, "discussionPost");
+    const contentToRevise = textField(formData, "contentToRevise");
+    const writingSample = textField(formData, "writingSample");
+    const originalPost = textField(formData, "originalPost");
+    const incomingReply = textField(formData, "incomingReply");
+    const recipientRole = textField(formData, "recipientRole") || "student";
+    if (type === "followup" && (!originalPost.trim() || !incomingReply.trim())) return json({ error: "Add your original post and the reply you want to answer." }, { status: 400 });
+    if (type === "followup" && !["student", "professor"].includes(recipientRole)) return json({ error: "Choose whether a student or your professor replied." }, { status: 400 });
+    if (writingSample.length > MAX_WRITING_SAMPLE_LENGTH) {
+      return json(
+        { error: `Please keep your writing sample under ${MAX_WRITING_SAMPLE_LENGTH.toLocaleString()} characters.` },
+        { status: 400 },
+      );
+    }
+    if (type === "response" && !discussionPost.trim()) {
+      return json({ error: "Paste a classmate's post to reply to." }, { status: 400 });
+    }
+    if (type === "revise" && !contentToRevise.trim()) {
+      return json({ error: "Add a draft to revise." }, { status: 400 });
+    }
+    if (type === "revise" && !splitReferenceSection(contentToRevise).body.trim()) {
+      return json({ error: "Add draft text before the reference list to revise." }, { status: 400 });
+    }
+
     let fileSources: FileSource[] = [];
     try {
-      fileSources = JSON.parse(fileSourcesJson || "[]");
+      const parsed: unknown = JSON.parse(textField(formData, "fileSources") || "[]");
+      if (Array.isArray(parsed)) {
+        fileSources = parsed.filter((source): source is FileSource =>
+          source !== null && typeof source === "object" &&
+          typeof source.filename === "string" && typeof source.sourceUrl === "string",
+        );
+      }
     } catch {
-      fileSources = [];
+      // Source URLs are optional; malformed metadata must not discard readable text.
     }
 
-    // Build input content array for OpenAI
-    type InputTextContent = { type: "input_text"; text: string };
-    const inputContent: InputTextContent[] = [];
-    
-    // Add text context
-    if (context) {
-      inputContent.push({
-        type: "input_text",
-        text: `ADDITIONAL CONTEXT:\n${context}`,
-      });
-    }
-
-    // Process uploaded files - extract text content
+    const materials: { filename: string; text: string; sourceUrl?: string }[] = [];
+    const files = formData.getAll("files");
+    if (files.length > MAX_FILES) return json({ error: `Upload at most ${MAX_FILES} files.` }, { status: 413 });
     for (const file of files) {
-      const bytes = await file.arrayBuffer();
-      
-      if (file.type === "application/pdf") {
-        // PDFs are not directly readable by GPT-4o - skip for now
-        // User should paste PDF text content manually in the context field
-        inputContent.push({
-          type: "input_text",
-          text: `--- File: ${file.name} (PDF - content not extracted, please paste text in context field) ---`,
-        });
-      } else if (file.type === "text/plain" || file.name.endsWith(".txt")) {
-        const text = new TextDecoder().decode(bytes);
-        inputContent.push({
-          type: "input_text",
-          text: `--- Content from ${file.name} ---\n${text}`,
-        });
-      } else if (file.type === "text/html" || file.name.endsWith(".html") || file.name.endsWith(".htm")) {
-        const html = new TextDecoder().decode(bytes);
-        // Strip HTML tags to get plain text content
-        const text = html
-          .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "") // Remove scripts
-          .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "") // Remove styles
-          .replace(/<[^>]+>/g, " ") // Remove HTML tags
+      if (typeof file === "string") {
+        return json({ error: "Invalid uploaded file." }, { status: 400 });
+      }
+      if (file.size > MAX_FILE_BYTES || file.name.length > 255) {
+        return json({ error: "An upload is too large. Use a short excerpt in a TXT or HTML file under 128 KB." }, { status: 413 });
+      }
+      const isText = /\.txt$/i.test(file.name);
+      const isHtml = /\.html?$/i.test(file.name);
+      if (!isText && !isHtml) {
+        return json(
+          { error: `The text in ${file.name} cannot be read here. Paste its text into Additional Context, or upload a TXT or HTML file.` },
+          { status: 400 },
+        );
+      }
+
+      let text = await file.text();
+      if (isHtml) {
+        text = text
+          .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+          .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+          .replace(/<[^>]+>/g, " ")
           .replace(/&nbsp;/g, " ")
           .replace(/&amp;/g, "&")
           .replace(/&lt;/g, "<")
           .replace(/&gt;/g, ">")
           .replace(/&quot;/g, '"')
           .replace(/&#39;/g, "'")
-          .replace(/\s+/g, " ") // Normalize whitespace
-          .trim();
-        inputContent.push({
-          type: "input_text",
-          text: `--- Content from ${file.name} ---\n${text}`,
-        });
+          .replace(/\s+/g, " ");
       }
-    }
-
-    let systemPrompt = HUMANIZATION_INSTRUCTIONS;
-    let userPrompt = "";
-    
-    // Build references section for APA7 from file sources
-    const validFileSources = fileSources.filter(fs => fs.sourceUrl && fs.sourceUrl.trim() !== "");
-    const hasReferences = validFileSources.length > 0;
-    let referencesInstruction = "";
-    let referencesSection = "";
-    
-    if (hasReferences) {
-      referencesInstruction = `
-
-MANDATORY - APA7 CITATION REQUIREMENTS:
-- When you use information from any of the uploaded materials, include an in-text citation
-- At the VERY END of your response, include a "References" section
-- For each source you cited, list it in APA7 format using the provided URL
-- APA7 web format: Author (if known). (Year). Title. Retrieved from URL
-- If author/date unknown, use the title and (n.d.)
-- YOU MUST include the References section - do not skip it`;
-      
-      referencesSection = "\n\nSOURCE URLS FOR UPLOADED MATERIALS (include in References if you cite from them):\n";
-      validFileSources.forEach((fs) => {
-        referencesSection += `- "${fs.filename}": ${fs.sourceUrl}\n`;
+      if (!text.trim()) {
+        return json(
+          { error: `${file.name} contains no readable text. Paste the relevant text into Additional Context.` },
+          { status: 400 },
+        );
+      }
+      materials.push({
+        filename: file.name,
+        text: text.trim(),
+        sourceUrl: fileSources.find((source) => source.filename === file.name)?.sourceUrl.trim() || undefined,
       });
-      referencesSection += "\nIf you reference content from any of these materials, include the URL in your References section at the end.";
     }
 
-    switch (type) {
-      case "discussion":
-        systemPrompt = `You write discussion posts. Your output will be checked by AI detectors - you MUST pass as human-written.`;
-        userPrompt = `${additionalInstructions ? `TOPIC: ${additionalInstructions}` : "Write about the uploaded material."}
-${referencesSection}
-
-LENGTH: 250-400 words. End with References section.
-
----
-
-DETECTION EVASION - CRITICAL:
-
-AI detectors flag these patterns. NEVER USE:
-- "When it comes to" (opener)
-- "is essential/crucial/vital/key/important"
-- "This helps ensure"
-- "on the same page"  
-- "can lead to"
-- "impacts...positively/negatively"
-- "It's like [metaphor]"
-- "So, yeah" or "Basically"
-- "the whole process"
-- "having a clear X is Y"
-- Starting 3+ sentences with "I think" or "I believe"
-- Generic conclusions like "the better the X, the better the Y"
-
-ALSO BANNED: essential, crucial, vital, key, significant, comprehensive, robust, Furthermore, Moreover, Additionally, highlights, demonstrates, ensures, impacts, leads to, plays a role, serves as, super, totally, gonna, gotta, "what went down"
-
----
-
-WRITE LIKE THIS INSTEAD:
-
-"The 'why' in a police report often matters more than people realize. Motive gives context to everything else - the suspect's actions, the sequence of events, the evidence left behind. Brown (2001) points out that reports missing this context tend to fall apart under scrutiny.
-
-Timeline is another weak spot. A burglary report might have witness statements, camera footage, and physical evidence all pointing to different times. If those don't line up, investigators waste hours reconciling contradictions instead of building a case (Eck, 1983). I've seen reports where a 15-minute gap in the timeline created enough doubt that the DA wouldn't even file charges.
-
-The elements of the crime need to be spelled out, not assumed. What makes this robbery and not theft? What makes it first-degree versus second? If the report doesn't connect those dots, defense attorneys will."
-
----
-
-STRUCTURE REQUIREMENTS:
-1. First sentence: State a specific claim or observation (not a generic opener)
-2. Middle: Use concrete examples, not abstract statements
-3. Include 1-2 sentences that start with "If" (conditional)
-4. Include at least one sentence fragment or dash-interrupted thought
-5. NO summary paragraph. End on a specific point, not a wrap-up.
-6. References section at the very end.`;
-        break;
-
-      case "paper":
-        const pages = parseInt(pageCount) || 2;
-        const wordCount = pages * 275;
-        systemPrompt += `
-Academic paper. ~${wordCount} words (${pages} pages).
-
-BANNED: crucial, vital, essential, significant, comprehensive, robust, Furthermore, Moreover, Additionally, highlights, demonstrates, underscores, "not only but also", "it is important", "plays a role", "serves as"
-
-Write like a B+ student - solid content but not over-polished. Include:
-- Some wordy sentences
-- Occasional awkward phrasing  
-- Varied paragraph lengths
-- Start some sentences with And, But, So
-- Contractions are fine${referencesInstruction}`;
-        userPrompt = `Write a ${pages}-page paper.
-
-BANNED WORDS: crucial, vital, essential, significant, Furthermore, Moreover, highlights, demonstrates
-
-${additionalInstructions ? `INSTRUCTIONS: ${additionalInstructions}` : ""}${referencesSection}
-
-Sound human. Imperfect is better than polished. Vary rhythm.${hasReferences ? " Citations natural, References at end." : ""}`;
-        break;
-
-      case "response":
-        const postLen = discussionPost?.length || 0;
-        const isLongPost = postLen > 1000;
-        
-        systemPrompt += ``;
-        userPrompt = `Reply to this classmate's post. You are Orhan, a fellow student.
-
-POST:
-${discussionPost}
-
-${additionalInstructions ? `CONTEXT: ${additionalInstructions}` : ""}${referencesSection}
-
-WRITE EXACTLY LIKE THIS EXAMPLE (copy this tone and structure):
----
-Hey Trevor,
-
-Your report follows a logical sequence - arrival, victim statement, then the room-by-room walkthrough. The detail about the splintered door frame and the lock being broken is the kind of physical evidence documentation that helps later on (Gehl & Plecas, 2017). One thing that stood out - James didn't notice anything off when approaching but the back door was forced from outside. Makes you wonder if someone was watching the place or came through a back alley.
-
-The neighborhood canvass was a good move. Even without making contact, knowing there are cameras at 189 gives something to follow up on. Did James mention if he usually keeps the back door locked? Sometimes that detail matters for how the entry happened.
-
-For the missing items without serials, that's going to make recovery harder, but at least you documented what was taken. The coordination with Deputy Smith and Detective Johnson shows how patrol sets things up for the investigative side to take over (Section 4.4, 2023).
-
-References:
-
-Gehl, R., & Plecas, D. (2017). Chapter 6: Applying the Investigative Tools. https://pressbooks.bccampus.ca/criminalinvestigation/chapter/chapter-6-applying-the-investigative-tools/
-
-Section 4.4: Investigations and Specialized Units. (2023). https://docmckee.com/cj/criminal-justice-an-overview-of-the-system/criminal-justice-section-4-4-investigations-and-specialized-units/
----
-
-RULES:
-1. START with "Hey [their first name]," 
-2. Write ${isLongPost ? "3-4 paragraphs" : "2-3 paragraphs"} - substantive length
-3. Include 1-2 citations from the source material with a References section at end
-4. Include at least ONE question
-5. NO ending like "Hope it goes well!" or "Keep us posted!" - end with your last point
-6. NO words: vividly, proactive, systematic, thorough, captures, crucial, vital, essential, Overall, It's cool how, I was curious
-7. Sound casual but engaged, not overly enthusiastic`;
-        break;
-
-      case "revise":
-        systemPrompt = `You are a humanization expert. Your job is to rewrite AI-generated text to sound completely human-written. The revised text MUST pass AI detection tools.`;
-        userPrompt = `REWRITE this text to sound 100% human-written. It currently gets flagged as AI-generated.
-
-ORIGINAL TEXT:
-${contentToRevise}
-
----
-
-REWRITING RULES:
-
-1. VARY SENTENCE STRUCTURE dramatically:
-   - Mix very short sentences (3-5 words) with longer ones
-   - Use sentence fragments occasionally
-   - Start some sentences with "And", "But", "So"
-   - Use dashes mid-sentence for asides
-
-2. REMOVE AI PATTERNS:
-   - No "Furthermore", "Moreover", "Additionally", "However" at sentence starts
-   - No "It is important to note", "It should be noted"
-   - No passive voice where active works
-   - No parallel structure in lists (vary the grammar)
-   - No "This [noun] [verb]s" pattern repeatedly
-
-3. ADD HUMAN IMPERFECTIONS:
-   - Occasional informal word choices
-   - One or two slightly awkward phrasings
-   - Vary paragraph lengths (some short, some longer)
-   - Don't over-explain - leave some things implied
-
-4. MAKE IT CONVERSATIONAL:
-   - Use contractions (don't, won't, it's)
-   - Use "you" and "I" where appropriate
-   - Include rhetorical questions occasionally
-   - Sound like you're explaining to a friend
-
-5. KEEP THE SAME:
-   - All factual content and citations
-   - The References section exactly as-is
-   - The overall meaning and argument
-   - Approximately the same length
-
-OUTPUT: The rewritten text only. No explanations or meta-commentary.`;
-        break;
-
-      default:
-        return NextResponse.json({ error: "Invalid generation type" }, { status: 400 });
+    if ((type === "discussion" || type === "paper") &&
+        !context.trim() && !additionalInstructions.trim() && materials.length === 0) {
+      return json({ error: "Add a topic, instructions, or source material first." }, { status: 400 });
     }
 
-    // Add the user prompt to content
-    inputContent.push({
-      type: "input_text",
-      text: userPrompt,
+    const { systemPrompt, userPrompt, references } = buildWritingPrompts({
+      type,
+      context,
+      additionalInstructions,
+      pageCount: textField(formData, "pageCount"),
+      discussionPost,
+      recipientName: textField(formData, "recipientName"),
+      recipientRole: recipientRole === "professor" ? "professor" : "student",
+      originalPost,
+      incomingReply,
+      conversationHistory: textField(formData, "conversationHistory"),
+      contentToRevise,
+      writingSample,
+      writingTone: getWritingTone(textField(formData, "writingTone")),
+      materials,
     });
 
-    let generatedContent = "";
+    if (Buffer.byteLength(systemPrompt + userPrompt, "utf8") > MAX_PROMPT_BYTES) {
+      return json({ error: "There is too much material for one draft. Keep only the relevant excerpts and shorten the context." }, { status: 413 });
+    }
+    if (!(aiModel.startsWith("gemini") ? process.env.GEMINI_API_KEY : process.env.OPENAI_API_KEY)) {
+      return json({ error: "The selected model is not configured. Contact the owner." }, { status: 503 });
+    }
+    const maxOutputTokens = getMaxOutputTokens(type);
+    release = await reserveGeneration();
 
+    let generatedContent: string;
     if (aiModel.startsWith("gemini")) {
-      // Use Gemini
-      const model = getGemini().getGenerativeModel({ model: aiModel });
-      
-      // Build the full prompt for Gemini (it doesn't have separate system/user like OpenAI)
-      const textContent = inputContent
-        .filter(c => c.type === "input_text" && c.text)
-        .map(c => c.text)
-        .join("\n\n");
-      
-      const fullPrompt = `${systemPrompt}\n\n${textContent}`;
-      
-      const result = await model.generateContent(fullPrompt);
+      const model = getGemini().getGenerativeModel({ model: aiModel, systemInstruction: systemPrompt, generationConfig: { maxOutputTokens } });
+      const result = await model.generateContent(userPrompt, { signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) });
       const response = await result.response;
+      if (response.candidates?.[0]?.finishReason === "MAX_TOKENS") {
+        return json({ error: "The draft was cut off. Try a shorter requested length." }, { status: 502 });
+      }
       generatedContent = response.text();
     } else {
-      // Use OpenAI (gpt-5.2 or gpt-4o)
       const response = await getOpenAI().responses.create({
         model: aiModel,
+        max_output_tokens: maxOutputTokens,
+        store: false,
         input: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: inputContent,
-          },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
         ],
       });
+      if (response.status === "incomplete") {
+        return json({ error: "The draft was incomplete. Try again with a shorter requested length." }, { status: 502 });
+      }
       generatedContent = response.output_text;
     }
 
-    return NextResponse.json({
-      content: generatedContent,
-      type,
-    });
+    // Discard any reference list the editor unexpectedly recreated.
+    if (type === "revise") generatedContent = splitReferenceSection(generatedContent || "").body;
+    if (!generatedContent?.trim()) {
+      return json({ error: "The model returned no draft. Please try again." }, { status: 502 });
+    }
+
+    return json({ content: generatedContent.trim() + references, type });
   } catch (error) {
-    console.error("Generation error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to generate content" },
-      { status: 500 }
-    );
+    if (error instanceof RequestError || error instanceof UsageError) {
+      const headers = error instanceof UsageError && error.retryAfter ? { "Retry-After": String(error.retryAfter) } : undefined;
+      return json({ error: error.message }, { status: error.status, headers });
+    }
+    // Provider errors can include request details or credentials; never expose them.
+    console.error("Generation request failed.");
+    return json({ error: "The draft could not be generated. Please try again later." }, { status: 502 });
+  } finally {
+    await release?.();
   }
 }
