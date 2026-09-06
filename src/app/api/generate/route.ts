@@ -5,7 +5,7 @@ import { DEFAULT_MODEL, findModel } from "@/lib/models";
 import { createRequestAuth } from "@/lib/server/supabase";
 import { getAccessConfig } from "@/lib/server/access-config";
 import { isSameOriginRequest } from "@/lib/server/authorization";
-import { readExtractedMaterials } from "@/lib/server/extracted-materials";
+import { readExtractedMaterials, readSourceMetadata } from "@/lib/server/extracted-materials";
 import { readGenerationForm, RequestError } from "@/lib/server/request-body";
 import { getMaxOutputTokens, reserveGeneration, UsageError } from "@/lib/server/usage-limits";
 import { MAX_FILES, MAX_FILE_BYTES, MAX_PROMPT_BYTES, PROVIDER_TIMEOUT_MS } from "@/lib/request-limits";
@@ -53,6 +53,7 @@ function getGemini(): GoogleGenerativeAI {
 interface FileSource {
   filename: string;
   sourceUrl: string;
+  citationDetails?: unknown;
 }
 
 function textField(formData: FormData, name: string): string {
@@ -167,7 +168,7 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
       materials.push({
         filename: file.name,
         text: text.trim(),
-        sourceUrl: fileSources.find((source) => source.filename === file.name)?.sourceUrl.trim() || undefined,
+        ...readSourceMetadata(fileSources.find((source) => source.filename === file.name) || {}),
       });
     }
 

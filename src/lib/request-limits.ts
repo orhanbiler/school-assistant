@@ -4,6 +4,7 @@ export const MAX_FILES = 3;
 export const MAX_PROMPT_BYTES = 32_000;
 export const MAX_BATCH_POSTS = 10;
 export const PROVIDER_TIMEOUT_MS = 60_000;
+export const MAX_CITATION_DETAILS_LENGTH = 1000;
 
 export const TEXT_FIELD_LIMITS: Record<string, number> = {
   type: 20,
@@ -21,7 +22,7 @@ export const TEXT_FIELD_LIMITS: Record<string, number> = {
   writingSample: 6000,
   writerNotes: 4000,
   writingTone: 30,
-  fileSources: 3000,
+  fileSources: 10_000,
   extractedMaterials: 60_000,
 };
 

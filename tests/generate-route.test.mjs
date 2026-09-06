@@ -110,7 +110,7 @@ test("generation forwards voice, assignment, readable material and citation meta
   const result = await request({
     type: "paper", writingTone: "academic", writingSample: "I prefer a direct explanation.",
     additionalInstructions: "Write one paragraph.",
-    fileSources: JSON.stringify([{ filename: "notes.HTML", sourceUrl: "https://example.org/pilot" }]),
+    fileSources: JSON.stringify([{ filename: "notes.HTML", sourceUrl: "https://example.org/pilot", citationDetails: "Lee, A. (2024). Evening library pilot." }]),
   }, [new File(["<style>body{color:red}</style><p>Visits rose to 65.</p><script>ignore this</script>"], "notes.HTML")]);
   assert.equal(result.status, 200);
   assert.equal(result.data.content, reply);
@@ -121,7 +121,7 @@ test("generation forwards voice, assignment, readable material and citation meta
   const input = userData(call.input[1].content);
   assert.equal(input.writingSample, "I prefer a direct explanation.");
   assert.equal(input.additionalInstructions, "Write one paragraph.");
-  assert.deepEqual(input.materials, [{ filename: "notes.HTML", text: "Visits rose to 65.", sourceUrl: "https://example.org/pilot" }]);
+  assert.deepEqual(input.materials, [{ filename: "notes.HTML", text: "Visits rose to 65.", sourceUrl: "https://example.org/pilot", citationDetails: "Lee, A. (2024). Evening library pilot." }]);
 });
 
 test("Gemini receives separate system instructions and the same voice/context fields", async () => {
@@ -181,7 +181,7 @@ test("raw documents that bypass extraction and invalid inputs fail before a prov
 });
 
 test("reviewed PDF and Word passages reach both providers with their source metadata", async () => {
-  const materials = [{ filename: "reading.pdf", text: "The report recommends listening.", sourceUrl: "https://example.org/report" }, { filename: "rubric.docx", text: "Explain your reasoning." }];
+  const materials = [{ filename: "reading.pdf", text: "The report recommends listening.", sourceUrl: "https://example.org/report", citationDetails: "Community Garden Council. (2024). Member feedback report." }, { filename: "rubric.docx", text: "Explain your reasoning." }];
   for (const aiModel of ["gpt-5.2", "gemini-2.5-pro"]) {
     assert.equal((await request({ type: "discussion", aiModel, extractedMaterials: JSON.stringify(materials) })).status, 200);
     const call = calls.at(-1);
@@ -206,6 +206,24 @@ test("malformed optional citation metadata does not discard readable material", 
     assert.equal(result.status, 200);
     assert.equal(userData(calls.at(-1).input[1].content).materials[0].text, "Trial notes.");
   }
+});
+
+test("citation details are bounded and validated before either upload path spends credits", async () => {
+  const before = calls.length, quotaBefore = quotaCalls.length;
+  for (const metadata of [
+    { citationDetails: 42 }, { citationDetails: null }, { citationDetails: { title: "Report" } },
+    { citationDetails: "x".repeat(1001) }, { sourceUrl: "x".repeat(2001) },
+  ]) {
+    const source = { filename: "reading.txt", sourceUrl: "", ...metadata };
+    const extracted = await request({ type: "discussion", extractedMaterials: JSON.stringify([{ ...source, text: "A selected passage." }]) });
+    const uploaded = await request({ type: "discussion", fileSources: JSON.stringify([source]) }, [new File(["A selected passage."], "reading.txt")]);
+    assert.ok([400, 413].includes(extracted.status));
+    assert.ok([400, 413].includes(uploaded.status));
+  }
+  assert.equal(calls.length, before);
+  assert.equal(quotaCalls.length, quotaBefore);
+  const boundary = await request({ type: "discussion", extractedMaterials: JSON.stringify([{ filename: "reading.pdf", text: "A selected passage.", citationDetails: "x".repeat(1000) }]) });
+  assert.equal(boundary.status, 200);
 });
 
 test("empty and truncated provider outputs are errors, not successful drafts", async () => {

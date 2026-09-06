@@ -181,9 +181,10 @@ export default function WritingWorkspace() {
     formData.append("fileSources", JSON.stringify(storedFiles.map((sf) => ({
       filename: sf.name,
       sourceUrl: sf.sourceUrl,
+      citationDetails: sf.citationDetails,
     }))));
     formData.append("extractedMaterials", JSON.stringify(storedFiles.filter((sf) => sf.text !== undefined).map((sf) => ({
-      filename: sf.name, text: sf.text, sourceUrl: sf.sourceUrl, pages: sf.pages,
+      filename: sf.name, text: sf.text, sourceUrl: sf.sourceUrl, citationDetails: sf.citationDetails, pages: sf.pages,
     }))));
     for (const sf of storedFiles) {
       if (sf.text === undefined) formData.append("files", storedFileToFile(sf));
@@ -399,6 +400,7 @@ export default function WritingWorkspace() {
                     );
                     set("storedFiles", next);
                   }}
+                  onUpdateCitation={(index, details) => set("storedFiles", storedFiles.map((file, i) => i === index ? { ...file, citationDetails: details } : file))}
                 />
 
                 <Separator />
@@ -518,6 +520,11 @@ export default function WritingWorkspace() {
                       value={additionalInstructions}
                       onChange={(v) => set("additionalInstructions", v)}
                     />
+                    {!writerNotes.trim() && <p className="text-sm text-muted-foreground">
+                      To guide this post with your own view, add your main point and a reason in{" "}
+                      <a href="#writing" className="text-primary underline underline-offset-4">Your Voice &amp; Ideas</a>.
+                      {" "}A writing sample guides the style; your notes supply what you think.
+                    </p>}
                     <GenerateBtn
                       label="Generate Discussion Post"
                       busyLabel="Crafting your post"

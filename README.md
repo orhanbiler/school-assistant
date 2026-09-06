@@ -10,9 +10,11 @@ Use **My Thread** to reply to a student or professor under your own discussion p
 
 Use **Your Voice & Ideas** to choose a tone, add your main point in **What I want to say**, and optionally paste a short sample of your own writing. These settings apply to drafts, revisions, and batch replies. Add relevant source excerpts in Additional Context. Upload PDF, Word (.docx), TXT, or HTML files. PDF and Word documents are read on your device; review the text and choose relevant PDF pages before adding it. Only the selected text is saved and sent for generation. PDFs and Word files can be up to 25 MB; scanned PDFs need text recognition first, and older .doc files must be saved as .docx.
 
+Open **Citation details** under an uploaded material to add its known publication title, author or organization, and year. This is useful when selected pages leave out the cover. These details save with that material and accompany its excerpt when generating; the app does not fetch the source URL. Missing information still needs review before submitting a draft.
+
 Use **My draft → Edit** to change the writing yourself. Your edits save on this device. **Light edit with AI** accepts editing instructions, and **Restore previous draft** recovers the version before the last generation or revision. On phones, use Materials, Write, and My draft to move around the workspace. The header offers home-screen installation, and supported browsers can share the current draft through the device's share sheet. AI generation still requires an internet connection and private sign-in; the app does not cache private pages for offline access.
 
-**Refine Writing** edits for clarity and flow while preserving the draft's meaning and restoring its reference list unchanged. See the [writing quality review guide](docs/writing-quality.md) for repeatable examples and validation steps. The app does not guarantee detector scores.
+**Light edit with AI** edits for clarity and flow while preserving the draft's meaning and restoring its reference list unchanged. See the [writing quality review guide](docs/writing-quality.md) for repeatable examples and validation steps. The app does not guarantee detector scores.
 
 ## Getting Started
 

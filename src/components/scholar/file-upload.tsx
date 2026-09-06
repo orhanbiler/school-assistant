@@ -5,6 +5,7 @@ import { FileText, Link as LinkIcon, Loader2, Trash2, Upload } from "lucide-reac
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -12,7 +13,7 @@ import { DocumentReview } from "./document-review";
 import { readDocument } from "@/lib/read-document-client";
 import type { ExtractedDocument } from "@/lib/document-extraction";
 import { cn } from "@/lib/utils";
-import { MAX_DOCUMENT_BYTES, MAX_FILE_BYTES, MAX_FILES } from "@/lib/request-limits";
+import { MAX_CITATION_DETAILS_LENGTH, MAX_DOCUMENT_BYTES, MAX_FILE_BYTES, MAX_FILES } from "@/lib/request-limits";
 
 export interface StoredFile {
   name: string;
@@ -22,6 +23,7 @@ export interface StoredFile {
   pages?: string;
   originalSize?: number;
   sourceUrl: string;
+  citationDetails?: string;
 }
 
 interface FileUploadProps {
@@ -29,6 +31,7 @@ interface FileUploadProps {
   onAdd: (files: StoredFile[]) => void;
   onRemove: (index: number) => void;
   onUpdateSource: (index: number, url: string) => void;
+  onUpdateCitation: (index: number, details: string) => void;
 }
 
 const ACCEPTED = ".pdf,.docx,.txt,.html,.htm";
@@ -51,7 +54,7 @@ function fileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource }: FileUploadProps) {
+export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource, onUpdateCitation }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [reading, setReading] = useState(false);
@@ -218,10 +221,20 @@ export function FileUpload({ storedFiles, onAdd, onRemove, onUpdateSource }: Fil
                   <summary className="cursor-pointer text-muted-foreground">Review selected text{sf.pages ? ` · PDF pages ${sf.pages}` : ""}</summary>
                   <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs">{sf.text}</p>
                 </details>}
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-muted-foreground">Citation details{sf.citationDetails?.trim() ? " · added" : " · add title, author, and year"}</summary>
+                  <div className="mt-3 space-y-2">
+                    <Label htmlFor={`citation-details-${index}`}>Title, author, and year (optional)</Label>
+                    <Textarea id={`citation-details-${index}`} value={sf.citationDetails || ""} maxLength={MAX_CITATION_DETAILS_LENGTH} onChange={(event) => onUpdateCitation(index, event.target.value)} placeholder="Copy the publication details from the document's cover or reference entry." aria-describedby={`citation-help-${index}`} className="min-h-24 bg-background/50" />
+                    <p id={`citation-help-${index}`} className="text-xs text-muted-foreground">Selected pages may leave out the cover. Add known source details here so the draft can cite the publication. Leave unknown details out.</p>
+                  </div>
+                </details>
                 <div className="flex items-center gap-2">
                   <LinkIcon className="w-4 h-4 text-muted-foreground shrink-0" />
                   <Input
                     placeholder="Source URL for APA7 citation (optional)"
+                    aria-label={`Source URL for ${sf.name}`}
+                    maxLength={2000}
                     value={sf.sourceUrl}
                     onChange={(e) => onUpdateSource(index, e.target.value)}
                     className="bg-background/50 text-sm h-8"
