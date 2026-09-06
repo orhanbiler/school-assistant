@@ -12,6 +12,8 @@ export const TEXT_FIELD_LIMITS: Record<string, number> = {
   context: 20_000,
   additionalInstructions: 4000,
   pageCount: 2,
+  paperFocus: 2000,
+  paraphraseOnly: 5,
   discussionPost: 12_000,
   originalPost: 16_000,
   incomingReply: 12_000,

@@ -154,6 +154,31 @@ test("the user's own notes supply a draft direction for both providers", async (
   assert.equal(quotaCalls.length, quotaBefore);
 });
 
+test("paper focus and paraphrase requirements reach both providers with no additional calls", async () => {
+  for (const aiModel of ["gpt-5.2", "gemini-2.5-pro"]) {
+    const before = calls.length;
+    const result = await request({ type: "paper", aiModel, paperFocus: "Maple Court library: evening access for shift workers.", paraphraseOnly: "true" });
+    assert.equal(result.status, 200);
+    assert.equal(calls.length, before + 1);
+    const call = calls.at(-1);
+    const input = userData(aiModel === "gpt-5.2" ? call.input[1].content : call.contents[0].parts[0].text);
+    const system = aiModel === "gpt-5.2" ? call.input[0].content : call.systemInstruction.parts[0].text;
+    assert.equal(input.paperFocus, "Maple Court library: evening access for shift workers.");
+    assert.match(system, /SOURCE USE REQUIREMENT/);
+  }
+  const references = "\r\n\r\nReferences\r\nLee. Trial.";
+  const result = await request({ type: "revise", contentToRevise: `The advice is “listen first” (Lee, 2024).${references}`, paraphraseOnly: "true" });
+  assert.equal(result.status, 200);
+  assert.match(calls.at(-1).input[0].content, /SOURCE USE REQUIREMENT/);
+  assert.equal(result.data.content, `A useful draft.${references}`);
+  const before = calls.length, quotaBefore = quotaCalls.length;
+  for (const fields of [{ paperFocus: "x".repeat(2001) }, { paraphraseOnly: "yes" }, { paraphraseOnly: "TRUE" }]) {
+    assert.ok([400, 413].includes((await request({ type: "paper", context: "Topic", ...fields })).status));
+  }
+  assert.equal(calls.length, before);
+  assert.equal(quotaCalls.length, quotaBefore);
+});
+
 test("revision restores the original bibliography even if the provider recreates one", async () => {
   reply = "A clearer draft (Lee, 2024).\n\nReferences\nAn unwanted replacement.";
   const references = "\r\n\r\n## References\r\nLee, A. (2024). Pilot. https://example.org/pilot\r\n";

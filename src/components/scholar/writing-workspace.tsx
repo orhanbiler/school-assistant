@@ -41,7 +41,7 @@ import { DEFAULT_MODEL } from "@/lib/models";
 import { requestDraft, GenerationFailure } from "@/lib/generate-client";
 import { MAX_BATCH_POSTS } from "@/lib/request-limits";
 import { countWords } from "@/lib/text";
-import { getWritingTone, MAX_WRITING_SAMPLE_LENGTH, MAX_WRITER_NOTES_LENGTH, WRITING_TONES, type WritingTone } from "@/lib/writing-prompts";
+import { getWritingTone, MAX_PAPER_FOCUS_LENGTH, MAX_WRITING_SAMPLE_LENGTH, MAX_WRITER_NOTES_LENGTH, WRITING_TONES, type WritingTone } from "@/lib/writing-prompts";
 
 const STORAGE_KEY = "scholarQuillData.v2";
 
@@ -49,6 +49,10 @@ interface PersistedState {
   context: string;
   additionalInstructions: string;
   pageCount: string;
+  paperFocus: string;
+  paraphraseOnly: boolean;
+  draftParaphraseOnly: boolean;
+  previousParaphraseOnly: boolean;
   discussionPost: string;
   generatedContent: string;
   previousDraft: string;
@@ -70,6 +74,10 @@ const DEFAULT_STATE: PersistedState = {
   context: "",
   additionalInstructions: "",
   pageCount: "2",
+  paperFocus: "",
+  paraphraseOnly: true,
+  draftParaphraseOnly: false,
+  previousParaphraseOnly: false,
   discussionPost: "",
   generatedContent: "",
   previousDraft: "",
@@ -147,6 +155,9 @@ export default function WritingWorkspace() {
     context,
     additionalInstructions,
     pageCount,
+    paperFocus = "",
+    paraphraseOnly = true,
+    draftParaphraseOnly = false,
     discussionPost,
     generatedContent,
     previousDraft = "",
@@ -168,6 +179,7 @@ export default function WritingWorkspace() {
     () => Boolean(context.trim() || additionalInstructions.trim() || writerNotes.trim()) || storedFiles.length > 0,
     [context, additionalInstructions, writerNotes, storedFiles.length],
   );
+  const hasPaperMaterial = hasMaterial || Boolean(paperFocus.trim());
 
   const buildFormData = useCallback(() => {
     const formData = new FormData();
@@ -192,8 +204,8 @@ export default function WritingWorkspace() {
     return formData;
   }, [aiModel, context, additionalInstructions, pageCount, writingSample, writerNotes, writingTone, storedFiles]);
 
-  const acceptDraft = useCallback((content: string) => {
-    setState((previous) => ({ ...previous, previousDraft: previous.generatedContent, generatedContent: content }));
+  const acceptDraft = useCallback((content: string, useParaphrasesOnly = false) => {
+    setState((previous) => ({ ...previous, previousDraft: previous.generatedContent, previousParaphraseOnly: previous.draftParaphraseOnly ?? false, generatedContent: content, draftParaphraseOnly: useParaphrasesOnly }));
     requestAnimationFrame(() => {
       if (window.matchMedia("(max-width: 1023px)").matches) {
         document.getElementById("draft")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
@@ -210,6 +222,10 @@ export default function WritingWorkspace() {
         const formData = buildFormData();
         formData.append("type", type);
         formData.append("discussionPost", discussionPost);
+        if (type === "paper") {
+          formData.append("paperFocus", paperFocus);
+          formData.append("paraphraseOnly", String(paraphraseOnly));
+        }
         if (type === "followup") {
           formData.append("originalPost", originalPost);
           formData.append("incomingReply", incomingReply);
@@ -220,7 +236,7 @@ export default function WritingWorkspace() {
 
         const data = await generateRequest(formData);
 
-        acceptDraft(data.content);
+        acceptDraft(data.content, type === "paper" && paraphraseOnly);
         if (type === "discussion") set("originalPost", data.content);
         toast.success("Content generated", {
           description: `${countWords(data.content)} words ready for review`,
@@ -238,6 +254,8 @@ export default function WritingWorkspace() {
       buildFormData,
       generateRequest,
       discussionPost,
+      paperFocus,
+      paraphraseOnly,
       originalPost,
       incomingReply,
       recipientName,
@@ -255,9 +273,10 @@ export default function WritingWorkspace() {
       const formData = buildFormData();
       formData.append("type", "revise");
       formData.append("contentToRevise", generatedContent);
+      formData.append("paraphraseOnly", String(draftParaphraseOnly));
       formData.set("additionalInstructions", instructions);
       const data = await generateRequest(formData);
-      acceptDraft(data.content);
+      acceptDraft(data.content, draftParaphraseOnly);
       toast.success("Writing refined");
     } catch (error) {
       toast.error("Could not refine writing", {
@@ -266,7 +285,7 @@ export default function WritingWorkspace() {
     } finally {
       setIsRevising(false);
     }
-  }, [generatedContent, isRevising, isLoading, buildFormData, generateRequest, acceptDraft]);
+  }, [generatedContent, draftParaphraseOnly, isRevising, isLoading, buildFormData, generateRequest, acceptDraft]);
 
   const handleBatchGenerate = useCallback(async () => {
     if (isLoading || isRevising) return;
@@ -341,14 +360,14 @@ export default function WritingWorkspace() {
       e.preventDefault();
       if (isLoading) return;
       if (activeTab === "discussion" && hasMaterial) generate("discussion");
-      else if (activeTab === "paper" && hasMaterial) generate("paper");
+      else if (activeTab === "paper" && hasPaperMaterial) generate("paper");
       else if (activeTab === "response" && discussionPost.trim()) generate("response");
       else if (activeTab === "followup" && originalPost.trim() && incomingReply.trim()) generate("followup");
       else if (activeTab === "batch" && batchPosts.trim()) handleBatchGenerate();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTab, hasMaterial, discussionPost, originalPost, incomingReply, batchPosts, isLoading, generate, handleBatchGenerate]);
+  }, [activeTab, hasMaterial, hasPaperMaterial, discussionPost, originalPost, incomingReply, batchPosts, isLoading, generate, handleBatchGenerate]);
 
   const onClearAll = () => {
     clearStorage();
@@ -539,7 +558,7 @@ export default function WritingWorkspace() {
                     <TabIntro
                       icon={<BookOpen className="w-5 h-5 text-primary mt-0.5" />}
                       title="Academic Paper"
-                      description="Generate a well-structured paper with proper academic conventions"
+                      description="Build an essay around your assignment, case, and reasoning"
                     />
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -561,9 +580,20 @@ export default function WritingWorkspace() {
                         </div>
                       </div>
                     </div>
+                    <p className="text-xs text-muted-foreground">The estimate covers essay text, excluding references. Your assignment&apos;s length takes precedence. Download saves TXT; arrange the title page, spacing, margins, and references in Word if required.</p>
+                    <div className="space-y-2">
+                      <Label htmlFor="paper-focus">Specific community, case, or issue (optional)</Label>
+                      <Textarea id="paper-focus" value={paperFocus} onChange={(event) => set("paperFocus", event.target.value)} maxLength={MAX_PAPER_FOCUS_LENGTH} className="min-h-28 bg-background/50" placeholder="Name the setting and problem. Add relevant facts or paste the part of an earlier assignment that defines your case." aria-describedby="paper-focus-help" />
+                      <p id="paper-focus-help" className="text-xs text-muted-foreground">If the assignment builds on an earlier unit, include that context here or upload it. The draft cannot infer your previous choices. Saved on this device and sent when generating a paper.</p>
+                    </div>
+                    <label className="flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border border-border p-3">
+                      <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-primary" checked={paraphraseOnly} onChange={(event) => set("paraphraseOnly", event.target.checked)} aria-describedby="paraphrase-help" />
+                      <span className="space-y-1 text-sm"><span className="block font-medium">Paraphrases only · no direct quotes</span><span id="paraphrase-help" className="block text-xs text-muted-foreground">Keep source citations while explaining ideas in new wording. This requirement stays with the draft during AI editing.</span></span>
+                    </label>
                     <InstructionsField
                       id="paper-instructions"
-                      placeholder="Thesis direction, specific arguments to include, formatting requirements..."
+                      label="Assignment requirements (optional)"
+                      placeholder="Paste the full assignment questions, required length, source rules, and formatting instructions..."
                       value={additionalInstructions}
                       onChange={(v) => set("additionalInstructions", v)}
                     />
@@ -571,7 +601,7 @@ export default function WritingWorkspace() {
                       label="Generate Paper"
                       busyLabel="Writing your paper"
                       onClick={() => generate("paper")}
-                      disabled={isLoading || isRevising || !hasMaterial}
+                      disabled={isLoading || isRevising || !hasPaperMaterial}
                       isLoading={isLoading}
                     />
                   </TabsContent>
@@ -747,7 +777,8 @@ Your report is well written...`}
               onDownload={handleDownload}
               onEdit={(content) => set("generatedContent", content)}
               canRestore={Boolean(previousDraft)}
-              onRestore={() => setState((previous) => ({ ...previous, generatedContent: previous.previousDraft, previousDraft: previous.generatedContent }))}
+              paraphraseOnly={draftParaphraseOnly}
+              onRestore={() => setState((previous) => ({ ...previous, generatedContent: previous.previousDraft, previousDraft: previous.generatedContent, draftParaphraseOnly: previous.previousParaphraseOnly ?? false, previousParaphraseOnly: previous.draftParaphraseOnly ?? false }))}
             />
           </div>
         </div>
@@ -790,12 +821,14 @@ function TabIntro({
 
 function InstructionsField({
   id,
+  label = "Special Instructions (Optional)",
   placeholder,
   value,
   onChange,
   minH = "80px",
 }: {
   id: string;
+  label?: string;
   placeholder: string;
   value: string;
   onChange: (v: string) => void;
@@ -803,7 +836,7 @@ function InstructionsField({
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>Special Instructions (Optional)</Label>
+      <Label htmlFor={id}>{label}</Label>
       <Textarea
         id={id}
         placeholder={placeholder}

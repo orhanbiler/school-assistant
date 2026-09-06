@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { countCharacters, countWords, readingTime } from "@/lib/text";
+import { reviewDraft } from "@/lib/draft-review";
 
 interface GeneratedOutputProps {
   content: string;
@@ -19,6 +20,7 @@ interface GeneratedOutputProps {
   isRevising: boolean;
   reviseDisabled?: boolean;
   canRestore: boolean;
+  paraphraseOnly?: boolean;
   onRevise: (instructions?: string) => void;
   onDownload: () => void;
   onEdit: (content: string) => void;
@@ -27,12 +29,13 @@ interface GeneratedOutputProps {
 
 const subscribeToCapabilities = () => () => {};
 
-export function GeneratedOutput({ content, isLoading, isRevising, reviseDisabled = false, canRestore, onRevise, onDownload, onEdit, onRestore }: GeneratedOutputProps) {
+export function GeneratedOutput({ content, isLoading, isRevising, reviseDisabled = false, canRestore, paraphraseOnly = false, onRevise, onDownload, onEdit, onRestore }: GeneratedOutputProps) {
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState("rendered");
   const [instructions, setInstructions] = useState("");
   const canShare = useSyncExternalStore(subscribeToCapabilities, () => typeof navigator.share === "function", () => false);
   const stats = useMemo(() => ({ words: countWords(content), chars: countCharacters(content), reading: readingTime(content) }), [content]);
+  const reviewNotes = useMemo(() => reviewDraft(content, paraphraseOnly), [content, paraphraseOnly]);
   const busy = isLoading || isRevising || reviseDisabled;
 
   async function copyToClipboard() {
@@ -64,7 +67,7 @@ export function GeneratedOutput({ content, isLoading, isRevising, reviseDisabled
           <Button variant={copied ? "default" : "outline"} size="sm" onClick={copyToClipboard}>
             {copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy"}
           </Button>
-          <Button variant="outline" size="sm" onClick={onDownload}><Download />Download</Button>
+          <Button variant="outline" size="sm" onClick={onDownload}><Download />Download TXT</Button>
           {canShare && <Button variant="outline" size="sm" onClick={shareDraft}><Share2 />Share</Button>}
           {canRestore && <Button variant="ghost" size="sm" disabled={busy} onClick={() => { onRestore(); toast.success("Previous draft restored"); }}><Undo2 />Restore previous draft</Button>}
         </div>
@@ -72,6 +75,15 @@ export function GeneratedOutput({ content, isLoading, isRevising, reviseDisabled
           <span>{stats.words.toLocaleString()} words</span><span>{stats.chars.toLocaleString()} characters</span><span>{stats.reading}</span>
         </div>
       </>}
+      {content && !isLoading && reviewNotes.length > 0 && <section aria-label="Draft review" className="mt-3 space-y-3 rounded-lg border border-border bg-background/50 p-3 text-sm">
+        <p className="font-medium">Before you use this draft</p>
+        {reviewNotes.map((note) => <div key={note.id} className="space-y-1">
+          <p className="font-medium">{note.title}</p>
+          <p className="text-muted-foreground">{note.description}</p>
+          {note.examples.length > 0 && <ul className="list-disc space-y-1 pl-4 text-muted-foreground break-words">{note.examples.map((example) => <li key={example}>{example}</li>)}</ul>}
+        </div>)}
+        <p className="text-xs text-muted-foreground">These checks cannot verify sources or catch every quotation. Review the full draft.</p>
+      </section>}
     </CardHeader>
     <CardContent className="min-w-0">
       {(content || view === "edit") && !isLoading ? <Tabs value={view} onValueChange={setView} className="min-w-0">

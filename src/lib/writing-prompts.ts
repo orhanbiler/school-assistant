@@ -10,6 +10,7 @@ export const WRITING_TONES = [
 export type WritingTone = (typeof WRITING_TONES)[number]["id"];
 export const MAX_WRITING_SAMPLE_LENGTH = 6000;
 export const MAX_WRITER_NOTES_LENGTH = 4000;
+export const MAX_PAPER_FOCUS_LENGTH = 2000;
 
 export interface WritingMaterial {
   filename: string;
@@ -31,6 +32,8 @@ interface WritingPromptOptions {
   context?: string;
   additionalInstructions?: string;
   pageCount?: string;
+  paperFocus?: string;
+  paraphraseOnly?: boolean;
   discussionPost?: string;
   recipientName?: string;
   recipientRole?: "student" | "professor";
@@ -81,7 +84,9 @@ function taskInstructions(options: WritingPromptOptions): string {
       const requestedPages = Number(options.pageCount || 2);
       const pages = Number.isInteger(requestedPages) && requestedPages >= 1 && requestedPages <= 20
         ? requestedPages : 2;
-      return `Write an academic paper. Default target: approximately ${pages * 275} words (${pages} pages at 275 words per page), excluding references. An explicit word count or requested genre such as an essay or passage in the assignment takes precedence. Establish a focused thesis, develop connected reasoning with evidence, and end with an implication or synthesis. Organize paragraphs around the argument rather than summarizing each source in turn. Distinguish what a source actually establishes from the interpretation offered in the paper. Do not add personal reactions to the reading unless the user supplied them. Use headings only when the assignment or length warrants them; do not force a five-paragraph template.`;
+      return `Write an academic paper. Default target: approximately ${pages * 275} words (${pages} pages at 275 words per page), excluding references. An explicit word count or requested genre such as an essay or passage in the assignment takes precedence. Establish a focused thesis, develop connected reasoning with evidence, and end with an implication or synthesis. Organize paragraphs around the argument rather than summarizing each source in turn. Distinguish what a source actually establishes from the interpretation offered in the paper. Do not add personal reactions to the reading unless the user supplied them. Use headings only when the assignment or length warrants them; do not force a five-paragraph template.
+When a specific community, case, or problem is supplied in paperFocus or other task input, make it the subject of the analysis throughout. Explain why each proposed action or partner fits that problem, using supported details; naming the place once is insufficient. A general course reading is not evidence of local crime rates, local attitudes, existing programs, or partner commitments. Distinguish proposed actions from established local facts. If a required case is missing, mark it clearly for completion rather than pretending that "the selected community" identifies it.
+Develop the reasoning needed by the assignment. Avoid a broad topic overview followed by interchangeable challenge/solution paragraphs and a recap when a direct account of the case would be clearer. Keep necessary academic concepts, explain them through their consequences for the case, and omit lists of partners or recommendations that have no explained role. Paraphrase source ideas with citations unless quotation is permitted by the assignment and necessary to the analysis. A no-direct-quotes requirement takes precedence over a source's memorable wording.`;
     }
     case "response":
       return `Reply to the supplied classmate's post as a participant in the discussion. When no length is specified, aim for about 100–180 words, with room to be shorter for a narrow point. The assignment's word count and required questions take precedence. Develop one relevant point with your reasoning unless the task calls for more. Use a brief greeting only if the recipient's name is actually supplied; never guess a name. ${REPLY_GUIDANCE}`;
@@ -117,6 +122,7 @@ export function buildWritingPrompts(options: WritingPromptOptions) {
   // JSON keeps samples and source excerpts distinct from application instructions.
   const userInput = {
     assignmentContext: options.context?.trim() || undefined,
+    paperFocus: options.type === "paper" ? options.paperFocus?.trim() || undefined : undefined,
     additionalInstructions: options.additionalInstructions?.trim() || undefined,
     writingSample: options.writingSample?.trim() || undefined,
     writerNotes: options.writerNotes?.trim() || undefined,
@@ -131,7 +137,7 @@ export function buildWritingPrompts(options: WritingPromptOptions) {
   };
 
   return {
-    systemPrompt: `${WRITING_INSTRUCTIONS}\n\nTASK\n${taskInstructions(options)}\n\nVOICE\n${TONE_INSTRUCTIONS[options.writingTone ?? "auto"]}`,
+    systemPrompt: `${WRITING_INSTRUCTIONS}\n\nTASK\n${taskInstructions(options)}\n\nVOICE\n${TONE_INSTRUCTIONS[options.writingTone ?? "auto"]}${options.paraphraseOnly && ["paper", "revise"].includes(options.type) ? "\n\nSOURCE USE REQUIREMENT\nUse paraphrases and summaries only, with in-text citations. Do not include direct quotations or block quotations from sources, even short quoted phrases. In a revision, this requirement explicitly authorizes paraphrasing existing quotations while preserving their meaning, attribution, and citations. Do not merely delete quotation marks around copied words. Reference entries remain unchanged." : ""}`,
     userPrompt: `Use the following input for this writing task:\n${JSON.stringify(userInput, null, 2)}`,
     references,
   };

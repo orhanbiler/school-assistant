@@ -88,6 +88,9 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
     const allowedModels = process.env.AI_ALLOWED_MODELS?.split(",").map((value) => value.trim()).filter(Boolean);
     if (allowedModels && !allowedModels.includes(aiModel)) return json({ error: "This model is disabled by the owner." }, { status: 403 });
     const additionalInstructions = textField(formData, "additionalInstructions");
+    const paperFocus = textField(formData, "paperFocus");
+    const quotationSetting = textField(formData, "paraphraseOnly");
+    if (!["", "true", "false"].includes(quotationSetting)) return json({ error: "Choose a valid source-use setting." }, { status: 400 });
     const discussionPost = textField(formData, "discussionPost");
     const contentToRevise = textField(formData, "contentToRevise");
     const writingSample = textField(formData, "writingSample");
@@ -173,7 +176,7 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
     }
 
     if ((type === "discussion" || type === "paper") &&
-        !context.trim() && !additionalInstructions.trim() && !writerNotes.trim() && materials.length === 0) {
+        !context.trim() && !additionalInstructions.trim() && !writerNotes.trim() && !(type === "paper" && paperFocus.trim()) && materials.length === 0) {
       return json({ error: "Add a topic, instructions, or source material first." }, { status: 400 });
     }
 
@@ -182,6 +185,8 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
       context,
       additionalInstructions,
       pageCount: textField(formData, "pageCount"),
+      paperFocus,
+      paraphraseOnly: quotationSetting === "true",
       discussionPost,
       recipientName: textField(formData, "recipientName"),
       recipientRole: recipientRole === "professor" ? "professor" : "student",
