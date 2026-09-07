@@ -1,5 +1,13 @@
 # Mobile verification
 
+## September 7 settings update
+
+Below the 1024-pixel desktop breakpoint, a settings button opens a bottom panel with Light, Dark, and System appearance choices, sign-out, and a separate device-data section. Clearing data still requires confirmation. The panel scrolls on short screens and accounts for the bottom safe area. The header keeps one model picker and one installation control mounted across breakpoints.
+
+ESLint, TypeScript, the 66-test suite, and the Webpack production build passed. This update has not had a fresh viewport or physical-device check because no browser was connected. Follow-up checks should cover 320-pixel widths, landscape scrolling, theme selection, closing the panel, and canceling the clear-data confirmation without losing the settings panel.
+
+## Previous browser verification
+
 Checked on September 6, 2026 in a Chromium browser using viewport emulation. These checks do not substitute for testing a physical iPhone or Android device.
 
 ## Layout and interaction
