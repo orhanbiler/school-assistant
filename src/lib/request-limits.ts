@@ -24,6 +24,7 @@ export const TEXT_FIELD_LIMITS: Record<string, number> = {
   writingSample: 6000,
   writerNotes: 4000,
   writingTone: 30,
+  revisionMode: 20,
   fileSources: 10_000,
   extractedMaterials: 60_000,
 };

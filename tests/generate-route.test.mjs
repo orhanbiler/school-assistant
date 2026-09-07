@@ -189,6 +189,43 @@ test("revision restores the original bibliography even if the provider recreates
   reply = "A useful draft.";
 });
 
+test("both editing approaches use one protected call and restore references for either provider", async () => {
+  const savedReply = reply;
+  const references = "\r\n\r\n**References**\r\nLee, A. (2024). Library pilot. https://example.org/pilot\r\n";
+  const draft = `The trial may help evening visitors (Lee, 2024).${references}`;
+  reply = "Evening visitors may benefit from the trial (Lee, 2024).\n\nReferences\nDiscard this replacement.";
+  try {
+    for (const aiModel of ["gpt-5.2", "gemini-2.5-pro"]) {
+      for (const revisionMode of ["light", "rewrite"]) {
+        const before = calls.length, quotaBefore = quotaCalls.length;
+        const result = await request({ type: "revise", aiModel, revisionMode, contentToRevise: draft, paraphraseOnly: "true", writingTone: "academic", writingSample: "I use direct language.", additionalInstructions: "Keep one paragraph." });
+        assert.equal(result.status, 200);
+        assert.equal(calls.length, before + 1);
+        assert.deepEqual(quotaCalls.slice(quotaBefore).map(([name]) => name), ["reserve_ai_generation", "release_ai_generation"]);
+        assert.equal(result.data.content, `Evening visitors may benefit from the trial (Lee, 2024).${references}`);
+        const call = calls.at(-1);
+        const system = aiModel === "gpt-5.2" ? call.input[0].content : call.systemInstruction.parts[0].text;
+        const input = userData(aiModel === "gpt-5.2" ? call.input[1].content : call.contents[0].parts[0].text);
+        assert.equal(system.includes("You may reorganize paragraphs"), revisionMode === "rewrite");
+        assert.match(system, /SOURCE USE REQUIREMENT/);
+        assert.equal(input.draft, "The trial may help evening visitors (Lee, 2024).");
+        assert.equal(input.writingSample, "I use direct language.");
+        assert.equal(input.additionalInstructions, "Keep one paragraph.");
+      }
+    }
+  } finally { reply = savedReply; }
+});
+
+test("invalid editing approaches are rejected before spending quota", async () => {
+  const before = calls.length, quotaBefore = quotaCalls.length;
+  for (const revisionMode of ["REWRITE", "automatic", "invalid", "x".repeat(21)]) {
+    const result = await request({ type: "revise", contentToRevise: "An existing draft.", revisionMode });
+    assert.equal(result.status, revisionMode.length > 20 ? 413 : 400);
+  }
+  assert.equal(calls.length, before);
+  assert.equal(quotaCalls.length, quotaBefore);
+});
+
 test("raw documents that bypass extraction and invalid inputs fail before a provider call", async () => {
   const count = calls.length;
   const cases = [

@@ -8,6 +8,7 @@ export const WRITING_TONES = [
 ] as const;
 
 export type WritingTone = (typeof WRITING_TONES)[number]["id"];
+export type RevisionMode = "light" | "rewrite";
 export const MAX_WRITING_SAMPLE_LENGTH = 6000;
 export const MAX_WRITER_NOTES_LENGTH = 4000;
 export const MAX_PAPER_FOCUS_LENGTH = 2000;
@@ -27,6 +28,10 @@ export function getWritingTone(value: string): WritingTone {
   return WRITING_TONES.find((tone) => tone.id === value)?.id ?? "auto";
 }
 
+export function isRevisionMode(value: string): value is RevisionMode {
+  return value === "light" || value === "rewrite";
+}
+
 interface WritingPromptOptions {
   type: GenerationType;
   context?: string;
@@ -44,6 +49,7 @@ interface WritingPromptOptions {
   writingSample?: string;
   writerNotes?: string;
   writingTone?: WritingTone;
+  revisionMode?: RevisionMode;
   materials?: WritingMaterial[];
 }
 
@@ -56,6 +62,10 @@ WRITING QUALITY
 - Choose precise, familiar words. Keep necessary technical vocabulary. Use transitions when the connection needs explaining, rather than repeating stock linking phrases.
 - Name who does what and explain the practical consequence. Avoid strings of abstract concepts where a concrete action would say more. Use a contrast only when the distinction is necessary; repeated "not just X, but Y" constructions can obscure the point.
 - Let sentence and paragraph lengths vary with the ideas. Read for flow; avoid repeated openings, identical paragraph patterns, generic praise, and conclusions that merely repeat the introduction.
+- Start with the actual issue, answer, or decision. A short assignment rarely needs an opening about the importance of the entire field, a numbered preview of themes, or an announcement that "this paper argues" something. Include a roadmap only when the task or complexity makes it useful.
+- Build paragraphs from the reasoning: a claim, the evidence it needs, and what follows from that evidence. Do not repeat that sequence mechanically in every paragraph. Give the harder point more space; a qualification may need only a sentence. Avoid a series of equally sized paragraphs that each announce a challenge, summarize a source, and prescribe a solution.
+- Apply course concepts to something the reader can picture. Instead of ending at "strengthening accountability" or "building durable partnerships," explain the supported action, who could take it, and why it addresses this problem. If the necessary detail is missing, qualify the proposal or identify the gap; do not invent specificity.
+- Select and develop the useful example rather than accumulating lists of three abstract benefits, barriers, or partners. Make each recommendation earn its place in the argument. Keep citations beside the claims they support; do not repeatedly introduce the same source with "the report emphasizes" when the argument can lead.
 - Keep grammar sound. Do not manufacture typos, awkward phrasing, slang, fragments, or punctuation quirks to simulate a person. Do not ban ordinary words or force sentence patterns.
 - Use first person only when the genre allows it and the user's input supports what it says. Do not invent reactions to a reading, such as what the user found practical, appreciated, or was struck by. A writing sample supplies style, not permission to invent those reactions. If no personal perspective is supplied, explain the issue and evidence directly without attributing feelings, experience, or agreement to the user. Label invented illustrative scenarios as hypothetical. Explicitly requested fiction may contain invented details.
 
@@ -67,7 +77,19 @@ VOICE AND EVIDENCE
 - When using identifiable supplied sources, cite them and include only cited sources in a References section, using APA 7 unless another style is requested. Use only known metadata; do not guess authors or dates. If the task requires sources that were not supplied, state briefly what is missing instead of fabricating them. Without sources or a citation requirement, do not add decorative citations or an empty References heading.
 
 FINAL EDIT
-Before returning the result, check that it answers the actual prompt, has specific support where available, follows the requested length and format, and retains a consistent voice. Remove filler and repetition without dropping substance or making the prose artificially choppy. Return only the requested writing, with no preamble, editing report, or claims about authorship or detector scores.`;
+Review the completed draft before returning it, not just the writing plan. Check the openings of consecutive paragraphs for repeated scaffolding, and check the introduction against the conclusion for duplicated claims. Revise those passages so the argument advances. Read crowded sentences for the relationship they express; unpack them without replacing every sentence with a short one. Replace generic wording only with details supported by the input. If a sentence could fit an unrelated assignment unchanged, either connect it to this task or remove it.
+When a writing sample is supplied, compare the draft with its formality, typical vocabulary, use of first person and contractions, and amount of explanation. Adjust the draft's style where the assignment permits, without copying sample content. With no sample, use clear student prose at the requested level, not the voice of a policy brief or promotional report unless requested.
+Check that every required question, qualification, factual detail, citation, length requirement, and source-use rule survives the edit. Do not add personal anecdotes, errors, or unsupported claims to make the writing sound natural. Return only the finished writing, with no outline, alternate draft, preamble, editing report, or claims about authorship or detector scores.`;
+
+const STYLE_EXAMPLES = `STYLE CALIBRATION
+These fictional examples show how reasoning can replace generic wording. They supply no facts, sources, preferred policies, or phrases to reuse. Follow the actual assignment and input instead.
+- Given a fictional library-hours trial with evening visits increasing from 40 to 65 and staffing costs increasing by 20%:
+  Generic: "Implementing extended library hours can produce meaningful improvements in accessibility while presenting operational and financial challenges. These barriers can be mitigated through sustainable partnerships and strategic resource allocation."
+  More specific: "The longer hours brought in more evening visitors, but they also raised staffing costs. The next decision is whether the extra use justifies that expense. The visit counts alone cannot answer that question."
+- Given notes proposing shared garden maintenance because two volunteers do most of the work:
+  Generic: "A second challenge involves capacity constraints, which require durable stakeholder collaboration to ensure long-term sustainability."
+  More specific: "The garden still depends on two people doing most of the work. A shared schedule could make the gaps visible, but it would help only if more neighbors agreed to take a shift."
+The examples illustrate a connection between an observed detail and a limited inference. They are not a required contrast pattern, sentence length, opening, or level of informality. Keep an explicitly requested academic register.`;
 
 const TONE_INSTRUCTIONS: Record<WritingTone, string> = {
   auto: "Choose a voice appropriate to the requested genre and audience. In a revision, retain the original register unless the user requests a change.",
@@ -92,8 +114,12 @@ Develop the reasoning needed by the assignment. Avoid a broad topic overview fol
       return `Reply to the supplied classmate's post as a participant in the discussion. When no length is specified, aim for about 100–180 words, with room to be shorter for a narrow point. The assignment's word count and required questions take precedence. Develop one relevant point with your reasoning unless the task calls for more. Use a brief greeting only if the recipient's name is actually supplied; never guess a name. ${REPLY_GUIDANCE}`;
     case "followup":
       return `Write a follow-up reply under the user's own discussion post. The user wrote originalPost; incomingReply was written by the ${options.recipientRole === "professor" ? "professor" : "other student"}. Reply as the original author to that incoming message, taking any earlier conversation into account. When no length is specified, aim for about 80–160 words, with room to be shorter for a narrow question. The assignment's word count and required questions take precedence. Answer every actual question, acknowledge a useful correction when warranted, and explain or extend the user's point without simply repeating the original post. Do not confuse who wrote each message or write a review of the user's own post. ${options.recipientRole === "professor" ? "Use a respectful, direct tone with the professor. Address feedback substantively without excessive deference, flattery, or invented promises." : "Use a collegial, engaged tone with the other student."} Use a greeting only if a name is provided, retaining any supplied title without guessing a title or gender. Do not invent personal experience, agreement, evidence, or citations. ${REPLY_GUIDANCE}`;
-    case "revise":
-      return `Make a light edit of the supplied draft for clarity, specificity, flow, and the requested voice. Preserve its genre, argument, factual claims, degree of certainty, quotations, in-text citations, and approximately the same length unless the user explicitly requests a change. Preserve the original register when no different tone is selected. Do not add new evidence, experiences, rhetorical questions, or claims. Keep the user's own phrasing wherever it already works. Remove empty compliments and stock transitions if they add no meaning; replace abstract phrasing with a clear action only when that action is supported by the draft. A trailing reference list is held separately and will be restored unchanged: do not output or recreate it. Return only the revised body.`;
+    case "revise": {
+      const approach = options.revisionMode === "rewrite"
+        ? `Rewrite the supplied draft for natural flow. You may reorganize paragraphs, combine repetitive points, recast sentences, and replace a formulaic introduction or recap. Work from the draft's argument and evidence rather than substituting synonyms sentence by sentence. Give the most substantive reasoning the most space. Preserve distinctive phrasing where it works; a stronger rewrite does not require changing every sentence.`
+        : `Make a light edit of the supplied draft for clarity, specificity, flow, and the requested voice. Keep the user's own phrasing and paragraph structure wherever they already work.`;
+      return `${approach} Preserve its genre, argument, factual claims, degree of certainty, quotations, in-text citations, and approximately the same length unless the user explicitly requests a change. Keep each citation attached to the claim it supports, including when moving or combining sentences. Preserve the original register when no different tone is selected. Do not add new evidence, experiences, rhetorical questions, or claims. Remove empty compliments and stock transitions if they add no meaning; replace abstract phrasing with a clear action only when that action is supported by the draft. A trailing reference list is held separately and will be restored unchanged: do not output or recreate it. Return only the revised body.`;
+    }
   }
 }
 
@@ -137,7 +163,7 @@ export function buildWritingPrompts(options: WritingPromptOptions) {
   };
 
   return {
-    systemPrompt: `${WRITING_INSTRUCTIONS}\n\nTASK\n${taskInstructions(options)}\n\nVOICE\n${TONE_INSTRUCTIONS[options.writingTone ?? "auto"]}${options.paraphraseOnly && ["paper", "revise"].includes(options.type) ? "\n\nSOURCE USE REQUIREMENT\nUse paraphrases and summaries only, with in-text citations. Do not include direct quotations or block quotations from sources, even short quoted phrases. In a revision, this requirement explicitly authorizes paraphrasing existing quotations while preserving their meaning, attribution, and citations. Do not merely delete quotation marks around copied words. Reference entries remain unchanged." : ""}`,
+    systemPrompt: `${WRITING_INSTRUCTIONS}\n\n${STYLE_EXAMPLES}\n\nTASK\n${taskInstructions(options)}\n\nVOICE\n${TONE_INSTRUCTIONS[options.writingTone ?? "auto"]}${options.paraphraseOnly && ["paper", "revise"].includes(options.type) ? "\n\nSOURCE USE REQUIREMENT\nUse paraphrases and summaries only, with in-text citations. Do not include direct quotations or block quotations from sources, even short quoted phrases. In a revision, this requirement explicitly authorizes paraphrasing existing quotations while preserving their meaning, attribution, and citations. Do not merely delete quotation marks around copied words. Reference entries remain unchanged." : ""}`,
     userPrompt: `Use the following input for this writing task:\n${JSON.stringify(userInput, null, 2)}`,
     references,
   };

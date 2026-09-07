@@ -11,8 +11,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { countCharacters, countWords, readingTime } from "@/lib/text";
 import { reviewDraft } from "@/lib/draft-review";
+import { isRevisionMode, type RevisionMode } from "@/lib/writing-prompts";
 
 interface GeneratedOutputProps {
   content: string;
@@ -21,7 +23,7 @@ interface GeneratedOutputProps {
   reviseDisabled?: boolean;
   canRestore: boolean;
   paraphraseOnly?: boolean;
-  onRevise: (instructions?: string) => void;
+  onRevise: (instructions?: string, revisionMode?: RevisionMode) => void;
   onDownload: () => void;
   onEdit: (content: string) => void;
   onRestore: () => void;
@@ -33,6 +35,7 @@ export function GeneratedOutput({ content, isLoading, isRevising, reviseDisabled
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState("rendered");
   const [instructions, setInstructions] = useState("");
+  const [revisionMode, setRevisionMode] = useState<RevisionMode>("light");
   const canShare = useSyncExternalStore(subscribeToCapabilities, () => typeof navigator.share === "function", () => false);
   const stats = useMemo(() => ({ words: countWords(content), chars: countCharacters(content), reading: readingTime(content) }), [content]);
   const reviewNotes = useMemo(() => reviewDraft(content, paraphraseOnly), [content, paraphraseOnly]);
@@ -59,10 +62,25 @@ export function GeneratedOutput({ content, isLoading, isRevising, reviseDisabled
       <CardTitle className="flex items-center gap-2 text-xl"><Feather className="w-5 h-5 text-primary" />My draft</CardTitle>
       <CardDescription>Read it through, add your own wording, and check the sources.</CardDescription>
       {content && !isLoading && <>
+        <div className="mt-3 space-y-2">
+          <Label htmlFor="revision-mode">Editing approach</Label>
+          <Select value={revisionMode} onValueChange={(value) => { if (isRevisionMode(value)) setRevisionMode(value); }} disabled={busy}>
+            <SelectTrigger id="revision-mode" className="w-full bg-background/50" aria-describedby="revision-mode-help"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="light">Light edit</SelectItem>
+              <SelectItem value="rewrite">Rewrite for natural flow</SelectItem>
+            </SelectContent>
+          </Select>
+          <p id="revision-mode-help" className="text-xs text-muted-foreground">
+            {revisionMode === "rewrite"
+              ? "Reworks repetitive wording and paragraph structure while keeping your argument, facts, and citations."
+              : "Makes small improvements while keeping your wording and structure."}
+          </p>
+        </div>
         <div className="flex flex-wrap gap-2 mt-3">
-          <Button variant="outline" size="sm" onClick={() => onRevise(instructions)} disabled={busy || !content.trim()}>
+          <Button variant="outline" size="sm" onClick={() => onRevise(instructions, revisionMode)} disabled={busy || !content.trim()}>
             {isRevising ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            {isRevising ? "Revising…" : "Light edit with AI"}
+            {isRevising ? "Revising…" : revisionMode === "rewrite" ? "Rewrite for natural flow" : "Light edit with AI"}
           </Button>
           <Button variant={copied ? "default" : "outline"} size="sm" onClick={copyToClipboard}>
             {copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy"}
@@ -108,7 +126,7 @@ export function GeneratedOutput({ content, isLoading, isRevising, reviseDisabled
           <div className="space-y-2">
             <Label htmlFor="revision-instructions">What should the AI edit? (optional)</Label>
             <Textarea id="revision-instructions" value={instructions} onChange={(event) => setInstructions(event.target.value)} maxLength={2000} disabled={busy} placeholder="For example: shorten the opening, keep my example, and leave the ending as a statement." className="min-h-24" />
-            <p className="text-xs text-muted-foreground">Light editing keeps your meaning and references. Each AI edit uses one generation; your previous draft can be restored.</p>
+            <p className="text-xs text-muted-foreground">Both editing approaches keep your meaning and references. Each AI edit uses one generation; your previous draft can be restored.</p>
           </div>
         </TabsContent>
         <TabsContent value="raw" className="min-w-0 mt-0">

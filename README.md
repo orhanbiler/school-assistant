@@ -16,7 +16,9 @@ In **Paper**, use **Specific community, case, or issue** for the setting and pro
 
 Use **My draft → Edit** to change the writing yourself. Your edits save on this device. **Light edit with AI** accepts editing instructions, and **Restore previous draft** recovers the version before the last generation or revision. On phones, use Materials, Write, and My draft to move around the workspace. The header offers home-screen installation, and supported browsers can share the current draft through the device's share sheet. AI generation still requires an internet connection and private sign-in; the app does not cache private pages for offline access.
 
-**Light edit with AI** edits for clarity and flow while preserving the draft's meaning and restoring its reference list unchanged. See the [writing quality review guide](docs/writing-quality.md) for repeatable examples and validation steps. The app does not guarantee detector scores.
+All generation modes use guidance that starts with the actual issue, develops concrete reasoning, and reviews the draft for generic wording and repetitive paragraph structure. Your writing sample guides the voice without supplying facts for a different topic.
+
+Under **My draft → Editing approach**, choose **Light edit** for small changes or **Rewrite for natural flow** to reorganize repetitive paragraphs and recast formulaic passages. Both approaches preserve the argument and citations through model instructions and restore the original reference list unchanged in code. Each edit uses one generation, with the previous draft available to restore. See the [writing quality review guide](docs/writing-quality.md) for repeatable examples and validation steps. The app does not guarantee detector scores.
 
 ## Getting Started
 

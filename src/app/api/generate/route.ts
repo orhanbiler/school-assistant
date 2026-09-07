@@ -13,6 +13,7 @@ import {
   buildWritingPrompts,
   getWritingTone,
   isGenerationType,
+  isRevisionMode,
   MAX_WRITING_SAMPLE_LENGTH,
   splitReferenceSection,
 } from "@/lib/writing-prompts";
@@ -93,6 +94,8 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
     if (!["", "true", "false"].includes(quotationSetting)) return json({ error: "Choose a valid source-use setting." }, { status: 400 });
     const discussionPost = textField(formData, "discussionPost");
     const contentToRevise = textField(formData, "contentToRevise");
+    const revisionMode = textField(formData, "revisionMode") || "light";
+    if (!isRevisionMode(revisionMode)) return json({ error: "Choose a valid editing approach." }, { status: 400 });
     const writingSample = textField(formData, "writingSample");
     const writerNotes = textField(formData, "writerNotes");
     const originalPost = textField(formData, "originalPost");
@@ -194,6 +197,7 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
       incomingReply,
       conversationHistory: textField(formData, "conversationHistory"),
       contentToRevise,
+      revisionMode,
       writingSample,
       writerNotes,
       writingTone: getWritingTone(textField(formData, "writingTone")),

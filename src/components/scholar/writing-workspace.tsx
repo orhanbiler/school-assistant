@@ -41,7 +41,7 @@ import { DEFAULT_MODEL } from "@/lib/models";
 import { requestDraft, GenerationFailure } from "@/lib/generate-client";
 import { MAX_BATCH_POSTS } from "@/lib/request-limits";
 import { countWords } from "@/lib/text";
-import { getWritingTone, MAX_PAPER_FOCUS_LENGTH, MAX_WRITING_SAMPLE_LENGTH, MAX_WRITER_NOTES_LENGTH, WRITING_TONES, type WritingTone } from "@/lib/writing-prompts";
+import { getWritingTone, MAX_PAPER_FOCUS_LENGTH, MAX_WRITING_SAMPLE_LENGTH, MAX_WRITER_NOTES_LENGTH, WRITING_TONES, type RevisionMode, type WritingTone } from "@/lib/writing-prompts";
 
 const STORAGE_KEY = "scholarQuillData.v2";
 
@@ -266,13 +266,14 @@ export default function WritingWorkspace() {
     ],
   );
 
-  const handleRevise = useCallback(async (instructions = "") => {
+  const handleRevise = useCallback(async (instructions = "", revisionMode: RevisionMode = "light") => {
     if (!generatedContent || isRevising || isLoading) return;
     setIsRevising(true);
     try {
       const formData = buildFormData();
       formData.append("type", "revise");
       formData.append("contentToRevise", generatedContent);
+      formData.append("revisionMode", revisionMode);
       formData.append("paraphraseOnly", String(draftParaphraseOnly));
       formData.set("additionalInstructions", instructions);
       const data = await generateRequest(formData);

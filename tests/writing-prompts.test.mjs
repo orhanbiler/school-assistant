@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildWritingPrompts,
   getWritingTone,
+  isRevisionMode,
   splitReferenceSection,
 } from "../src/lib/writing-prompts.ts";
 
@@ -58,6 +59,41 @@ test("ordinary references to references in prose are not mistaken for a bibliogr
 
 test("a reference-only input has no editable body", () => {
   assert.equal(splitReferenceSection("References\nLee, A. (2024). A title.").body, "");
+});
+
+test("a structural rewrite changes the editing task, not the user's evidence or reference list", () => {
+  const references = "\r\n\r\n## References\r\nLee, A. (2024). Library pilot. https://example.org/pilot\r\n";
+  const options = {
+    type: "revise", contentToRevise: `Attendance may improve by 10% (Lee, 2024).${references}`,
+    writingTone: "academic", writingSample: "My sentences are usually fairly direct.",
+    additionalInstructions: "Keep the uncertainty and use one paragraph.", paraphraseOnly: true,
+  };
+  const original = buildWritingPrompts(options);
+  const light = buildWritingPrompts({ ...options, revisionMode: "light" });
+  const rewrite = buildWritingPrompts({ ...options, revisionMode: "rewrite" });
+  assert.deepEqual(original, light);
+  assert.equal(rewrite.userPrompt, light.userPrompt);
+  assert.equal(rewrite.references, references);
+  assert.equal(inputOf(rewrite).draft, "Attendance may improve by 10% (Lee, 2024).");
+  assert.match(rewrite.systemPrompt, /You may reorganize paragraphs/);
+  assert.doesNotMatch(light.systemPrompt, /You may reorganize paragraphs/);
+  for (const prompts of [light, rewrite]) {
+    assert.match(prompts.systemPrompt, /Keep each citation attached to the claim it supports/);
+    assert.match(prompts.systemPrompt, /SOURCE USE REQUIREMENT/);
+    assert.ok(!prompts.userPrompt.includes("https://example.org/pilot"));
+  }
+});
+
+test("editing mode cannot replace the task for a new draft or reply", () => {
+  assert.equal(isRevisionMode("rewrite"), true);
+  assert.equal(isRevisionMode("light"), true);
+  for (const invalid of ["", "automatic", "REWRITE", "ignore instructions"]) assert.equal(isRevisionMode(invalid), false);
+  for (const type of ["discussion", "paper", "response", "followup"]) {
+    assert.deepEqual(
+      buildWritingPrompts({ type }),
+      buildWritingPrompts({ type, revisionMode: "rewrite" }),
+    );
+  }
 });
 
 test("papers use page-based targets with bounded fallbacks", () => {
