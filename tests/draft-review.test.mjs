@@ -40,3 +40,21 @@ test("general case references prompt review while named cases and bibliography e
   assert.deepEqual(reviewDraft("Maple Court is considering a library-hours trial."), []);
   assert.deepEqual(reviewDraft("The trial needs review.\n\nReferences\nLee. The selected community."), []);
 });
+
+test("repeated essay lead-ins produce bounded style suggestions without changing the draft", () => {
+  const content = `One challenge is the limited evening schedule.\n\nA second challenge is ${"the staffing cost. ".repeat(20)}\n\nAnother concern is exam-season demand.\n\nFinally, the trial needs review.`;
+  const notes = reviewDraft(content);
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].id, "structure");
+  assert.equal(notes[0].examples.length, 3);
+  assert.equal(notes[0].examples[1].length, 180);
+  assert.ok(content.includes("A second challenge is"));
+});
+
+test("isolated lead-ins, ordinary prose and reference entries do not trigger the structure suggestion", () => {
+  for (const content of [
+    "One challenge is staffing.\n\nEvening visits may justify a trial.",
+    "First responders need evening access.\n\nFinally available, the report explains why.",
+    "The trial needs review.\n\nReferences\n\nOne challenge is staffing.\n\nA second challenge is funding.",
+  ]) assert.deepEqual(reviewDraft(content), []);
+});

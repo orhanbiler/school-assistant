@@ -40,6 +40,8 @@ async function usageRpc(name: string, args: Record<string, unknown>): Promise<un
       body: JSON.stringify(args), signal: AbortSignal.timeout(5000), cache: "no-store", redirect: "error",
     });
     if (!response.ok) throw new Error();
+    // PostgreSQL void RPCs can return an empty successful response.
+    if (name === "release_ai_generation") return null;
     return await response.json();
   } catch {
     // Never fall back to per-process counters: Vercel instances must share a budget.

@@ -33,6 +33,7 @@ let incomplete = false;
 let quotaReply = [1, 0, 0];
 let quotaUnavailable = false;
 let providerError = false;
+let emptyRelease = false;
 const quotaCalls = [];
 const authCalls = [];
 let refreshAllowed = false;
@@ -64,6 +65,7 @@ const fetchMock = mock.method(globalThis, "fetch", async (url, init) => {
     const args = JSON.parse(init.body);
     quotaCalls.push([name, args]);
     if (quotaUnavailable) throw new Error("Private storage error details");
+    if (name === "release_ai_generation" && emptyRelease) return new Response(null, { status: 204 });
     return Response.json(name === "reserve_ai_generation" ? quotaReply : null);
   }
   assert.match(address, /^https:\/\/(api\.openai\.com|generativelanguage\.googleapis\.com)\//);
@@ -378,6 +380,20 @@ test("provider errors do not leak details, retry charges, or leave the lease occ
     assert.equal(quotaCalls.at(-1)[0], "release_ai_generation");
     assert.match(result.headers.get("cache-control"), /no-store/);
   } finally { console.error = originalError; providerError = false; }
+});
+
+test("successful empty lease releases do not report an error or make another provider call", async () => {
+  const before = calls.length, quotaBefore = quotaCalls.length;
+  const errors = [], originalError = console.error;
+  emptyRelease = true;
+  console.error = (...args) => errors.push(args);
+  try {
+    const result = await request({ type: "discussion", context: "The library pilot." });
+    assert.equal(result.status, 200);
+    assert.equal(calls.length, before + 1);
+    assert.deepEqual(quotaCalls.slice(quotaBefore).map(([name]) => name), ["reserve_ai_generation", "release_ai_generation"]);
+    assert.deepEqual(errors, []);
+  } finally { emptyRelease = false; console.error = originalError; }
 });
 
 test("follow-up replies preserve the original author and professor/student roles", async () => {

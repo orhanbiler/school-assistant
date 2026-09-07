@@ -1,5 +1,7 @@
 # Reviewing writing quality
 
+For the measured detector experiments and the protected live-test command, see [Live writing evaluation](writing-evaluation.md). The automatic extra edit and shorter-prompt experiments did not establish a reliable improvement and are not enabled in production.
+
 The generator uses one model request with a final editorial check in the prompt. Voice settings, an optional writing sample, and **What I want to say** notes apply to initial drafts, individual replies, batch replies, and revision. The sample supplies style, not facts or citations. The notes supply the writer's actual point, reasoning, and relevant details. Revision treats the draft as authoritative and holds a trailing References, Works Cited, or Bibliography section outside the model, restoring it verbatim.
 
 The shared guidance now targets generic field-wide openings, numbered previews, repeated challenge/solution paragraph patterns, abstract recommendations, and conclusions that repeat the introduction. Short fictional examples show how to connect a supported detail to a limited inference. They are style illustrations, not facts to import or a required sentence pattern. Every mode asks the model to review the completed draft for those problems and compare its register with any supplied writing sample. This review happens within the original request; it does not add a hidden provider call or claim that a detector has checked the result.

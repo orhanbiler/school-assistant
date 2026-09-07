@@ -20,6 +20,8 @@ All generation modes use guidance that starts with the actual issue, develops co
 
 Under **My draft → Editing approach**, choose **Light edit** for small changes or **Rewrite for natural flow** to reorganize repetitive paragraphs and recast formulaic passages. Both approaches preserve the argument and citations through model instructions and restore the original reference list unchanged in code. Each edit uses one generation, with the previous draft available to restore. See the [writing quality review guide](docs/writing-quality.md) for repeatable examples and validation steps. The app does not guarantee detector scores.
 
+The draft review also highlights repeated paragraph lead-ins with concrete examples to consider while editing. It is an advisory style check, not an AI detector. See [Live writing evaluation](docs/writing-evaluation.md) for measured experiments and the protected test command.
+
 ## Getting Started
 
 Use the pinned pnpm version from `package.json` (10.34.5). Complete the private setup above and configure `.env.local`, then run:
