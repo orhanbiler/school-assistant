@@ -5,6 +5,12 @@ export const MAX_PROMPT_BYTES = 32_000;
 export const MAX_BATCH_POSTS = 10;
 export const PROVIDER_TIMEOUT_MS = 60_000;
 export const MAX_CITATION_DETAILS_LENGTH = 1000;
+export const MAX_MATERIAL_CONTEXT_LENGTH = 2000;
+export const MAX_STORED_MATERIALS = 30;
+export const MAX_WEEK_NUMBER = 52;
+export const MAX_PHOTO_BYTES = 20 * 1024 * 1024;
+export const MAX_IMAGE_UPLOAD_BYTES = 3 * 1024 * 1024;
+export const MAX_IMAGE_REQUEST_BYTES = MAX_IMAGE_UPLOAD_BYTES + 16 * 1024;
 
 export const TEXT_FIELD_LIMITS: Record<string, number> = {
   type: 20,
@@ -25,7 +31,7 @@ export const TEXT_FIELD_LIMITS: Record<string, number> = {
   writerNotes: 4000,
   writingTone: 30,
   revisionMode: 20,
-  fileSources: 10_000,
+  fileSources: 20_000,
   extractedMaterials: 60_000,
 };
 

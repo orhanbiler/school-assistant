@@ -39,7 +39,8 @@ import { BatchResponses, type BatchResponse } from "@/components/scholar/batch-r
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { requestDraft, GenerationFailure } from "@/lib/generate-client";
-import { MAX_BATCH_POSTS } from "@/lib/request-limits";
+import { MAX_BATCH_POSTS, MAX_FILES, MAX_STORED_MATERIALS } from "@/lib/request-limits";
+import { appendMaterialInputs, selectedMaterials } from "@/lib/materials";
 import { countWords } from "@/lib/text";
 import { getWritingTone, MAX_PAPER_FOCUS_LENGTH, MAX_WRITING_SAMPLE_LENGTH, MAX_WRITER_NOTES_LENGTH, WRITING_TONES, type RevisionMode, type WritingTone } from "@/lib/writing-prompts";
 
@@ -58,6 +59,7 @@ interface PersistedState {
   previousDraft: string;
   activeTab: string;
   storedFiles: StoredFile[];
+  activeWeek: number;
   aiModel: string;
   batchPosts: string;
   writingSample: string;
@@ -83,6 +85,7 @@ const DEFAULT_STATE: PersistedState = {
   previousDraft: "",
   activeTab: "discussion",
   storedFiles: [],
+  activeWeek: 1,
   aiModel: DEFAULT_MODEL,
   batchPosts: "",
   writingSample: "",
@@ -114,13 +117,6 @@ function parseBatchPosts(text: string): { name: string; post: string; recipientN
     }
     return { name: `Response ${i + 1}`, post: section };
   });
-}
-
-function storedFileToFile(sf: StoredFile): File {
-  const byteCharacters = atob(sf.data);
-  const arr = new Uint8Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) arr[i] = byteCharacters.charCodeAt(i);
-  return new File([arr], sf.name, { type: sf.type });
 }
 
 export default function WritingWorkspace() {
@@ -163,6 +159,7 @@ export default function WritingWorkspace() {
     previousDraft = "",
     activeTab,
     storedFiles,
+    activeWeek = 1,
     aiModel,
     batchPosts,
     writingSample = "",
@@ -176,8 +173,8 @@ export default function WritingWorkspace() {
   } = state;
 
   const hasMaterial = useMemo(
-    () => Boolean(context.trim() || additionalInstructions.trim() || writerNotes.trim()) || storedFiles.length > 0,
-    [context, additionalInstructions, writerNotes, storedFiles.length],
+    () => Boolean(context.trim() || additionalInstructions.trim() || writerNotes.trim()) || selectedMaterials(storedFiles).length > 0,
+    [context, additionalInstructions, writerNotes, storedFiles],
   );
   const hasPaperMaterial = hasMaterial || Boolean(paperFocus.trim());
 
@@ -190,17 +187,7 @@ export default function WritingWorkspace() {
     formData.append("writingSample", writingSample);
     formData.append("writerNotes", writerNotes);
     formData.append("writingTone", writingTone);
-    formData.append("fileSources", JSON.stringify(storedFiles.map((sf) => ({
-      filename: sf.name,
-      sourceUrl: sf.sourceUrl,
-      citationDetails: sf.citationDetails,
-    }))));
-    formData.append("extractedMaterials", JSON.stringify(storedFiles.filter((sf) => sf.text !== undefined).map((sf) => ({
-      filename: sf.name, text: sf.text, sourceUrl: sf.sourceUrl, citationDetails: sf.citationDetails, pages: sf.pages,
-    }))));
-    for (const sf of storedFiles) {
-      if (sf.text === undefined) formData.append("files", storedFileToFile(sf));
-    }
+    appendMaterialInputs(formData, storedFiles);
     return formData;
   }, [aiModel, context, additionalInstructions, pageCount, writingSample, writerNotes, writingTone, storedFiles]);
 
@@ -398,29 +385,29 @@ export default function WritingWorkspace() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <Upload className="w-5 h-5 text-primary" />
-                  Upload Materials
+                  Course Materials
                 </CardTitle>
                 <CardDescription>
-                  Upload PDF, Word, text, or HTML course materials
+                  Read textbook photos and organize your references by week
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FileUpload
                   storedFiles={storedFiles}
-                  onAdd={(files) => set("storedFiles", [...storedFiles, ...files])}
+                  activeWeek={activeWeek}
+                  onWeekChange={(week) => set("activeWeek", week)}
+                  onAdd={(files) => setState((previous) => {
+                    let count = selectedMaterials(previous.storedFiles).length;
+                    const additions = files.slice(0, MAX_STORED_MATERIALS - previous.storedFiles.length).map((file) => ({ ...file, included: count++ < MAX_FILES }));
+                    return { ...previous, storedFiles: [...previous.storedFiles, ...additions] };
+                  })}
                   onRemove={(index) =>
                     set(
                       "storedFiles",
                       storedFiles.filter((_, i) => i !== index),
                     )
                   }
-                  onUpdateSource={(index, url) => {
-                    const next = storedFiles.map((sf, i) =>
-                      i === index ? { ...sf, sourceUrl: url } : sf,
-                    );
-                    set("storedFiles", next);
-                  }}
-                  onUpdateCitation={(index, details) => set("storedFiles", storedFiles.map((file, i) => i === index ? { ...file, citationDetails: details } : file))}
+                  onUpdate={(index, patch) => setState((previous) => ({ ...previous, storedFiles: previous.storedFiles.map((file, i) => i === index ? { ...file, ...patch } : file) }))}
                 />
 
                 <Separator />

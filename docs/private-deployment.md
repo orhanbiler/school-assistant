@@ -55,6 +55,10 @@ Output is capped at 6,000 tokens for papers/revisions and 2,000 for other format
 
 ## Sessions and data
 
+The protected `/api/extract-image` endpoint accepts one prepared JPEG up to 3 MB, with a streamed request cap of 3 MB plus 16 KB. Camera/gallery photos are resized and re-encoded on the client before upload. Reading a photo uses one GPT-5.2 request against the same enable switch, model allowlist, output ceiling, and shared quota as drafting; no new environment variable or migration is needed. Original PDF/Word files still stay on the device. Photo requests send image pixels to OpenAI with `store: false`; only the reviewed text is saved in the browser. See [photo/material details](photo-materials.md).
+
+The device library holds up to 30 materials, with up to three selected for each generation. Per-source week and context metadata are validated server-side for both extracted documents/photos and legacy text uploads. Existing saved materials default to Week 1. Library storage does not synchronize between devices.
+
 Auth operations run on the server. Session cookies are HttpOnly, Secure on HTTPS, SameSite=Lax, and use an eight-hour browser lifetime renewed when tokens refresh. The page proxy refreshes cookies, but each protected endpoint independently verifies identity. This is not an absolute eight-hour session timeout. Supabase manages token expiry and refresh sessions. A copied access token can remain usable until it expires; sign-out revokes the current refresh session and clears its browser cookie. Removing/changing the configured owner or disabling generation provides an additional app-level lock after redeployment.
 
 Drafts and writing samples remain in this browser's local storage when signing out. Use **Clear all data** on a shared device. Generated Markdown cannot execute raw HTML, and remote images are disabled. The application does not log provider errors containing submitted text or credentials. Auth service outages deny access; quota database outages deny generation.

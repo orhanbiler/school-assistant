@@ -55,6 +55,8 @@ interface FileSource {
   filename: string;
   sourceUrl: string;
   citationDetails?: unknown;
+  weekNumber?: unknown;
+  materialContext?: unknown;
 }
 
 function textField(formData: FormData, name: string): string {

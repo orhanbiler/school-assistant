@@ -16,6 +16,8 @@ registerHooks({
 const { POST } = await import("../src/app/api/generate/route.ts");
 const { POST: signIn } = await import("../src/app/api/auth/sign-in/route.ts");
 const { POST: signOut } = await import("../src/app/api/auth/sign-out/route.ts");
+const { POST: extractImage } = await import("../src/app/api/extract-image/route.ts");
+const { appendMaterialInputs, materialWeek } = await import("../src/lib/materials.ts");
 
 const { getAccessConfig, isAllowedUser } = await import("../src/lib/server/access-config.ts");
 const owner = { id: "11111111-1111-4111-8111-111111111111", email: "owner@example.com", email_confirmed_at: "2026-01-01T00:00:00Z", aud: "authenticated", role: "authenticated" };
@@ -107,6 +109,119 @@ async function request(fields, files = [], options = {}) {
 function userData(text) {
   return JSON.parse(text.slice(text.indexOf("{")));
 }
+
+async function photoRequest({ file = new File([new Uint8Array([255, 216, 255, 0, 255, 217])], "page.jpg", { type: "image/jpeg" }), anonymous = false, origin = "https://writing.example.com", duplicate = false, header = "1" } = {}) {
+  const form = new FormData();
+  form.append("image", file);
+  if (duplicate) form.append("image", file);
+  const headers = new Headers({ Origin: origin, "X-Scholar-Request": header });
+  if (!anonymous) headers.set("Cookie", await sessionCookie());
+  // Finish Node's multipart serialization before testing cancellation of the
+  // inbound request stream (avoids an Undici serializer cancellation race).
+  const encoded = new Response(form);
+  headers.set("Content-Type", encoded.headers.get("Content-Type"));
+  const response = await extractImage(new Request("https://writing.example.com/api/extract-image", { method: "POST", headers, body: await encoded.arrayBuffer() }));
+  return { status: response.status, data: await response.json(), headers: response.headers };
+}
+
+test("photo transcription sends one image through owner access and shared quota without retries or storage", async () => {
+  const before = calls.length;
+  const beforeQuota = quotaCalls.length;
+  const response = await photoRequest();
+  assert.equal(response.status, 200);
+  assert.equal(response.data.text, reply);
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  assert.equal(calls.length, before + 1);
+  assert.equal(calls.at(-1).store, false);
+  assert.equal(calls.at(-1).model, "gpt-5.2");
+  assert.match(calls.at(-1).input[1].content[1].image_url, /^data:image\/jpeg;base64,/);
+  assert.equal(calls.at(-1).input[1].content[1].detail, "high");
+  assert.deepEqual(quotaCalls.slice(beforeQuota).map(([name]) => name), ["reserve_ai_generation", "release_ai_generation"]);
+});
+
+test("unsigned, cross-site, duplicate, spoofed and oversized photo uploads cannot consume quota", async () => {
+  const before = calls.length;
+  const beforeQuota = quotaCalls.length;
+  assert.equal((await photoRequest({ anonymous: true })).status, 401);
+  assert.equal((await photoRequest({ origin: "https://attacker.example" })).status, 403);
+  assert.equal((await photoRequest({ header: "" })).status, 403);
+  assert.equal((await photoRequest({ duplicate: true })).status, 400);
+  assert.equal((await photoRequest({ file: new File(["not an image"], "fake.jpg", { type: "image/jpeg" }) })).status, 415);
+  assert.equal((await photoRequest({ file: new File([new Uint8Array(4 * 1024 * 1024)], "big.jpg", { type: "image/jpeg" }) })).status, 413);
+  assert.equal(calls.length, before);
+  assert.equal(quotaCalls.length, beforeQuota);
+});
+
+test("photo reading honors the off switch, allowlist and quota, and releases failed provider requests", async () => {
+  const before = calls.length;
+  process.env.AI_GENERATION_ENABLED = "false";
+  assert.equal((await photoRequest()).status, 503);
+  process.env.AI_GENERATION_ENABLED = "true";
+  const previousAllowed = process.env.AI_ALLOWED_MODELS;
+  process.env.AI_ALLOWED_MODELS = "gpt-4o";
+  assert.equal((await photoRequest()).status, 403);
+  if (previousAllowed === undefined) delete process.env.AI_ALLOWED_MODELS; else process.env.AI_ALLOWED_MODELS = previousAllowed;
+  quotaReply = [0, 1, 15];
+  const limited = await photoRequest();
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("retry-after"), "15");
+  quotaReply = [1, 0, 0];
+  assert.equal(calls.length, before);
+  providerError = true;
+  const failed = await photoRequest();
+  providerError = false;
+  assert.equal(failed.status, 502);
+  assert.doesNotMatch(JSON.stringify(failed.data), /secret|Sensitive provider/);
+  assert.equal(calls.length, before + 1);
+  assert.equal(quotaCalls.at(-1)[0], "release_ai_generation");
+  incomplete = true;
+  assert.equal((await photoRequest()).status, 502);
+  incomplete = false;
+  const originalReply = reply;
+  reply = "[no readable text]";
+  assert.equal((await photoRequest()).status, 422);
+  reply = originalReply;
+});
+
+test("week and material context reach the provider for extracted and legacy files", async () => {
+  const metadata = { weekNumber: 8, materialContext: "Use pages 31–33 for the discussion", sourceUrl: "https://example.com/book", citationDetails: "A known author. (2025). Textbook." };
+  const extracted = await request({ type: "discussion", extractedMaterials: JSON.stringify([{ filename: "photo.jpg", text: "Actual textbook text.", ...metadata }]) });
+  assert.equal(extracted.status, 200);
+  assert.deepEqual(userData(calls.at(-1).input[1].content).materials[0], { filename: "photo.jpg", text: "Actual textbook text.", ...metadata });
+  const legacy = await request({ type: "discussion", fileSources: JSON.stringify([{ filename: "chapter.txt", ...metadata }]) }, [new File(["Source passage"], "chapter.txt", { type: "text/plain" })]);
+  assert.equal(legacy.status, 200);
+  assert.equal(userData(calls.at(-1).input[1].content).materials[0].weekNumber, 8);
+  assert.equal(userData(calls.at(-1).input[1].content).materials[0].materialContext, metadata.materialContext);
+  const before = quotaCalls.length;
+  for (const invalid of [{ weekNumber: 0 }, { weekNumber: 53 }, { weekNumber: 2.5 }, { weekNumber: "8" }, { materialContext: {} }, { materialContext: "x".repeat(2001) }]) {
+    const result = await request({ type: "discussion", extractedMaterials: JSON.stringify([{ filename: "photo.jpg", text: "text", ...invalid }]) });
+    assert.ok([400, 413].includes(result.status));
+  }
+  assert.equal(quotaCalls.length, before);
+});
+
+test("material selection preserves older weeks locally and keeps duplicate file metadata attached", () => {
+  const base = { name: "chapter.txt", type: "text/plain", data: btoa("Textbook passage"), sourceUrl: "" };
+  const form = new FormData();
+  appendMaterialInputs(form, [
+    { ...base, sourceUrl: "https://example.com/one", weekNumber: 1 },
+    { ...base, sourceUrl: "https://example.com/two", weekNumber: 2 },
+    { ...base, weekNumber: 3, included: false, materialContext: "Not for this draft" },
+    { ...base, name: "page.jpg", data: "", text: "Corrected photo text", weekNumber: 4, materialContext: "Use this section" },
+  ]);
+  const sources = JSON.parse(form.get("fileSources"));
+  assert.notEqual(sources[0].filename, sources[1].filename);
+  assert.deepEqual(sources.map((source) => source.weekNumber), [1, 2]);
+  assert.deepEqual(form.getAll("files").map((file) => file.name), sources.map((source) => source.filename));
+  assert.equal(JSON.parse(form.get("extractedMaterials"))[0].text, "Corrected photo text");
+  assert.ok(!String(form.get("extractedMaterials")).includes("Not for this draft"));
+  assert.equal(materialWeek(base), 1);
+  const longNameForm = new FormData();
+  appendMaterialInputs(longNameForm, [{ ...base, name: "x".repeat(251) + ".txt" }]);
+  assert.ok(longNameForm.get("files").name.length <= 255);
+  assert.match(longNameForm.get("files").name, /\.txt$/);
+  assert.throws(() => appendMaterialInputs(new FormData(), [base, base, base, base]), /Choose up to 3/);
+});
 
 test("generation forwards voice, assignment, readable material and citation metadata to OpenAI", async () => {
   const result = await request({

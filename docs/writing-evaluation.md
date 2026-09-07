@@ -23,11 +23,30 @@ Run one of these commands with Node 22.18+ and the project's configured private 
 ```bash
 node --experimental-strip-types scripts/evaluate-writing.mjs paper
 node --experimental-strip-types scripts/evaluate-writing.mjs reply
+node --experimental-strip-types scripts/evaluate-writing.mjs booking --runs 3
 ```
 
-Each invocation makes **one paid GPT-5.2 request**. It honors the generation enable switch, model allowlist, output cap, timeout, and shared Supabase quota. It releases the active lease even when the provider fails. No call retries automatically, and nothing is sent to a detector by this script.
+Each invocation makes **one paid GPT-5.2 request by default**. `--runs 1..5` runs that many identical requests sequentially, stopping on the first failure. It honors the generation enable switch, model allowlist, output cap, timeout, and shared Supabase quota. It releases the active lease even when the provider fails. No call retries automatically, and nothing is sent to a detector by this script. `--dry-run` prints the planned request without contacting OpenAI, Supabase, or a detector. These commands require Node 22.18+.
 
-The script prints a new temporary directory containing the generated draft, exact input prompts, and a manifest with the fixture, model, date, body word count, and content/prompt hashes. These files contain only synthetic classroom material. Credentials and raw provider errors are not written to them. Run the same case against each candidate version; retain all outputs rather than choosing only a favorable result. Compare required answers, source fidelity, clarity, length, and voice before deciding whether to ship a change. Any third-party score is a separate observation, not a guaranteed outcome.
+The script prints a new temporary directory containing `request.json`, `input.json`, and `experiment.json` with the fixture and requested run count. Each completed sample has `draft.txt`, `body.txt` (without the reference section), and `manifest.json` with exact content/input hashes, returned model snapshot, returned settings, token use, date, and word counts. Multiple runs use `run-01`, `run-02`, etc.; a single run keeps its draft and manifest at the top level. Word counts use whitespace-separated tokens and include any Markdown syntax. The manifest marks whether body length meets the fixture's requested range; this is not a writing-quality or authorship score. Failed runs preserve earlier completed samples and mark the experiment stopped.
+
+These files contain only synthetic classroom material. Credentials and raw provider errors are not written to them. Temporary directories can be removed by the OS; copy an experiment to `output/writing-evaluations/` to keep it locally (that directory is ignored by Git). Schema version 2 hashes serialized message arrays for `promptHash` and the complete request for `requestHash`; these hashes are not directly comparable with the old script's concatenated-prompt hash.
+
+The `booking` fixture uses a media-lab assignment absent from the system prompt's library and garden examples. The older library fixtures overlap with those examples, including their numerical facts, so they do not provide an independent topic for assessing transfer. Retain all outputs rather than selecting only favorable results. Compare required answers, source fidelity, clarity, length, and voice before deciding whether to ship a change. Any third-party score is a separate observation, not a guaranteed outcome.
+
+## Recording detector results
+
+Test exactly one saved file, unchanged, then log the displayed percentage locally:
+
+```bash
+node scripts/record-detector-result.mjs RUN_DIRECTORY full DETECTOR_HTTPS_URL SCORE unknown "Test time, product version/mode, displayed label, and highlights"
+```
+
+Replace the uppercase placeholders with the actual run directory, detector URL, and displayed number without `%`. Use `full` for `draft.txt` or `body` for `body.txt`. Use `probability` or `text-share` instead of `unknown` only when the vendor documents that interpretation. Do not turn an asterisk, an error, or an unsupported-length result into a numerical zero.
+
+The command appends to `detector-observations.jsonl`, preserving each observation with the file's SHA-256 hash, scope, word count, and recording time. It rejects edited draft files so a score cannot silently attach to an earlier version. Records are explicitly marked `manual-unverified`: the tool cannot prove what was pasted into the website or that a reported score is authentic. It never opens the website or transmits the draft. Avoid private report links containing credentials or access tokens.
+
+See [the September 7 investigation](detector-investigation.md) for the measured baseline, interpretation limits, and the next controlled comparisons.
 
 ## Production changes
 

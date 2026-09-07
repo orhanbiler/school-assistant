@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,13 +10,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { countWords } from "@/lib/text";
 import { MAX_MATERIAL_TEXT_BYTES } from "@/lib/request-limits";
 import type { ExtractedDocument } from "@/lib/document-extraction";
+import { MaterialMetadataFields, type MaterialMetadata } from "./material-metadata-fields";
 
-export function DocumentReview({ name, document, onUse, onCancel }: {
-  name: string; document: ExtractedDocument; onUse: (text: string, pages?: string) => void; onCancel: () => void;
+export function DocumentReview({ name, document, onUse, onCancel, defaultWeek = 1, photo = false, previewUrl, initialMetadata }: {
+  name: string; document: ExtractedDocument; onUse: (text: string, pages: string | undefined, metadata: MaterialMetadata) => void; onCancel: () => void;
+  defaultWeek?: number; photo?: boolean; previewUrl?: string; initialMetadata?: MaterialMetadata;
 }) {
   const [start, setStart] = useState("1");
   const [end, setEnd] = useState(String(document.pages?.length || 1));
   const [text, setText] = useState(document.text);
+  const [metadata, setMetadata] = useState<MaterialMetadata>({ weekNumber: defaultWeek, sourceUrl: "", ...initialMetadata });
   const [appliedPages, setAppliedPages] = useState(document.pages ? `1–${document.pages.length}` : undefined);
   const bytes = new TextEncoder().encode(text).byteLength;
   const overLimit = bytes > MAX_MATERIAL_TEXT_BYTES;
@@ -23,10 +27,11 @@ export function DocumentReview({ name, document, onUse, onCancel }: {
   return <Dialog open onOpenChange={(open) => { if (!open) onCancel(); }}>
     <DialogContent className="document-dialog sm:max-w-2xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden p-4 sm:p-6">
       <DialogHeader>
-        <DialogTitle>Choose text to use</DialogTitle>
+        <DialogTitle>{photo ? "Review photo text" : "Choose text to use"}</DialogTitle>
         <DialogDescription className="break-words">{name}{document.pages ? ` · ${document.pages.length} pages` : ""}. Review the extracted text before adding it to your materials.</DialogDescription>
       </DialogHeader>
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain space-y-4 pr-1">
+      {previewUrl && <details className="text-sm"><summary className="cursor-pointer min-h-11 content-center">Compare with the photo</summary><Image src={previewUrl} width={1200} height={1600} unoptimized alt="Original page for checking the extracted text" className="h-auto w-full rounded-lg" /></details>}
       {document.pages && <div className="space-y-2">
         <p className="text-sm text-muted-foreground">Page numbers refer to the PDF file, including its cover and contents.</p>
         <div className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_auto] items-end gap-3">
@@ -41,14 +46,15 @@ export function DocumentReview({ name, document, onUse, onCancel }: {
       <div className="space-y-2">
         <Label htmlFor="document-excerpt">Text for this draft</Label>
         <Textarea id="document-excerpt" className="field-sizing-fixed min-h-36 h-[32dvh] sm:h-64 resize-y" value={text} onChange={(event) => setText(event.target.value)} />
-        <p className="text-xs text-muted-foreground">{countWords(text).toLocaleString()} words · Only this text is saved and sent when you generate. The original document stays on your device.</p>
+        <p className="text-xs text-muted-foreground">{countWords(text).toLocaleString()} words · {photo ? "Check names, numbers, and any [unclear] passages against the photo. Only the corrected text is saved to your materials." : "Only this text is saved and sent when you generate. The original document stays on your device."}</p>
         {overLimit && <p role="status" className="text-sm text-destructive">This is a long document. {document.pages ? "Choose fewer pages above or " : ""}keep only the relevant passages in the text box.</p>}
         {!text.trim() && <p role="status" className="text-sm text-destructive">These pages contain no readable text. Choose other pages or paste a text excerpt.</p>}
       </div>
+      <MaterialMetadataFields id="document-material" value={metadata} onChange={(patch) => setMetadata((previous) => ({ ...previous, ...patch }))} />
       </div>
       <DialogFooter className="shrink-0 border-t pt-3">
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
-        <Button disabled={overLimit || !text.trim()} onClick={() => onUse(text.trim(), appliedPages)}>Add selected text</Button>
+        <Button disabled={overLimit || !text.trim()} onClick={() => onUse(text.trim(), appliedPages, metadata)}>Save to materials</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>;
