@@ -8,7 +8,7 @@ import { isSameOriginRequest } from "@/lib/server/authorization";
 import { readExtractedMaterials, readSourceMetadata } from "@/lib/server/extracted-materials";
 import { readGenerationForm, RequestError } from "@/lib/server/request-body";
 import { getMaxOutputTokens, reserveGeneration, UsageError } from "@/lib/server/usage-limits";
-import { MAX_FILES, MAX_FILE_BYTES, MAX_PROMPT_BYTES, PROVIDER_TIMEOUT_MS } from "@/lib/request-limits";
+import { MAX_FILES, MAX_FILE_BYTES, MAX_USER_PROMPT_BYTES, PROVIDER_TIMEOUT_MS } from "@/lib/request-limits";
 import {
   buildWritingPrompts,
   getWritingTone,
@@ -206,8 +206,12 @@ async function generate(request: Request, auth: ReturnType<typeof createRequestA
       materials,
     });
 
-    if (Buffer.byteLength(systemPrompt + userPrompt, "utf8") > MAX_PROMPT_BYTES) {
-      return json({ error: "There is too much material for one draft. Keep only the relevant excerpts and shorten the context." }, { status: 413 });
+    const inputBytes = Buffer.byteLength(userPrompt, "utf8");
+    if (inputBytes > MAX_USER_PROMPT_BYTES) {
+      const suggestion = materials.length
+        ? "In Course Materials, uncheck a source under Use in this draft or review and shorten its saved text. You can also shorten Additional Context."
+        : "Shorten Additional Context or the pasted draft or conversation.";
+      return json({ error: `This draft contains ${Math.ceil(inputBytes / 1000)} KB of input; the limit is ${MAX_USER_PROMPT_BYTES / 1000} KB. ${suggestion} Your saved materials have not been changed.` }, { status: 413 });
     }
     if (!(aiModel.startsWith("gemini") ? process.env.GEMINI_API_KEY : process.env.OPENAI_API_KEY)) {
       return json({ error: "The selected model is not configured. Contact the owner." }, { status: 503 });

@@ -18,6 +18,8 @@ const { POST: signIn } = await import("../src/app/api/auth/sign-in/route.ts");
 const { POST: signOut } = await import("../src/app/api/auth/sign-out/route.ts");
 const { POST: extractImage } = await import("../src/app/api/extract-image/route.ts");
 const { appendMaterialInputs, materialWeek } = await import("../src/lib/materials.ts");
+const { MAX_FILE_BYTES, MAX_MATERIAL_TEXT_BYTES, MAX_USER_PROMPT_BYTES, TEXT_FIELD_LIMITS } = await import("../src/lib/request-limits.ts");
+const { buildWritingPrompts } = await import("../src/lib/writing-prompts.ts");
 
 const { getAccessConfig, isAllowedUser } = await import("../src/lib/server/access-config.ts");
 const owner = { id: "11111111-1111-4111-8111-111111111111", email: "owner@example.com", email_confirmed_at: "2026-01-01T00:00:00Z", aud: "authenticated", role: "authenticated" };
@@ -369,6 +371,91 @@ test("reviewed PDF and Word passages reach both providers with their source meta
   }
 });
 
+test("three full excerpts and assignment fields fit every drafting mode without losing text", async () => {
+  const materials = ["reading.pdf", "rubric.docx", "page.jpg"].map((filename, index) => ({
+    filename,
+    text: `${index}${"é".repeat((MAX_MATERIAL_TEXT_BYTES - 2) / 2)}z`,
+    sourceUrl: `https://example.org/${"s".repeat(1980)}`,
+    citationDetails: "c".repeat(1000),
+    materialContext: "m".repeat(2000),
+    weekNumber: index + 1,
+  }));
+  const common = Object.fromEntries(["context", "additionalInstructions", "writingSample", "writerNotes"]
+    .map((field) => [field, "x".repeat(TEXT_FIELD_LIMITS[field])]));
+  for (const aiModel of ["gpt-5.2", "gemini-2.5-pro"]) {
+    for (const type of ["discussion", "paper", "response", "followup", "revise"]) {
+      const fields = { ...common, type, aiModel, extractedMaterials: JSON.stringify(materials),
+        paperFocus: "p".repeat(TEXT_FIELD_LIMITS.paperFocus),
+        discussionPost: "d".repeat(TEXT_FIELD_LIMITS.discussionPost),
+        originalPost: "o".repeat(TEXT_FIELD_LIMITS.originalPost),
+        incomingReply: "i".repeat(TEXT_FIELD_LIMITS.incomingReply),
+        conversationHistory: "h".repeat(TEXT_FIELD_LIMITS.conversationHistory),
+        contentToRevise: "r".repeat(TEXT_FIELD_LIMITS.contentToRevise),
+      };
+      const before = calls.length, quotaBefore = quotaCalls.length;
+      const result = await request(fields);
+      assert.equal(result.status, 200, `${aiModel} ${type}: ${JSON.stringify(result.data)}`);
+      assert.equal(calls.length, before + 1);
+      assert.deepEqual(quotaCalls.slice(quotaBefore).map(([name]) => name), ["reserve_ai_generation", "release_ai_generation"]);
+      const call = calls.at(-1);
+      const input = userData(aiModel === "gpt-5.2" ? call.input[1].content : call.contents[0].parts[0].text);
+      assert.deepEqual(input.materials, materials);
+      assert.equal(input.assignmentContext, common.context);
+      assert.equal(input.writingSample, common.writingSample);
+      if (type === "followup") {
+        assert.equal(input.originalPost, fields.originalPost);
+        assert.equal(input.incomingReply, fields.incomingReply);
+        assert.equal(input.conversationHistory, fields.conversationHistory);
+      }
+      if (type === "revise") assert.equal(input.draft, fields.contentToRevise);
+    }
+  }
+});
+
+test("an allowed full-size TXT upload fits with assignment context and a draft to revise", async () => {
+  const text = "a".repeat(MAX_FILE_BYTES);
+  const result = await request({ type: "revise", context: "c".repeat(TEXT_FIELD_LIMITS.context),
+    contentToRevise: "d".repeat(TEXT_FIELD_LIMITS.contentToRevise) }, [new File([text], "reading.txt")]);
+  assert.equal(result.status, 200, JSON.stringify(result.data));
+  const input = userData(calls.at(-1).input[1].content);
+  assert.equal(input.materials[0].text, text);
+  assert.equal(input.draft.length, TEXT_FIELD_LIMITS.contentToRevise);
+});
+
+test("full excerpts still fit with maximum citation and relevance metadata", async () => {
+  const materials = Array.from({ length: 3 }, (_, index) => ({ filename: `reading-${index}.pdf`,
+    text: "a".repeat(MAX_MATERIAL_TEXT_BYTES), sourceUrl: `https://example.org/${"s".repeat(1980)}`,
+    citationDetails: "c".repeat(1000), materialContext: "m".repeat(2000), weekNumber: index + 1 }));
+  const result = await request({ type: "discussion", extractedMaterials: JSON.stringify(materials) });
+  assert.equal(result.status, 200, JSON.stringify(result.data));
+  assert.deepEqual(userData(calls.at(-1).input[1].content).materials, materials);
+});
+
+test("the input budget counts UTF-8 bytes, excludes writing rules, and rejects overflow before quota", async () => {
+  const materials = [{ filename: "first.txt", text: "" }, { filename: "second.txt", text: "" }];
+  const overhead = Buffer.byteLength(buildWritingPrompts({ type: "discussion", context: "Topic", materials }).userPrompt);
+  const available = MAX_USER_PROMPT_BYTES - overhead;
+  materials[0].text = "é".repeat(Math.floor(available / 4));
+  materials[1].text = "b".repeat(available - Buffer.byteLength(materials[0].text));
+  const prompts = buildWritingPrompts({ type: "discussion", context: "Topic", materials });
+  assert.equal(Buffer.byteLength(prompts.userPrompt), MAX_USER_PROMPT_BYTES);
+  assert.ok(Buffer.byteLength(prompts.systemPrompt + prompts.userPrompt) > MAX_USER_PROMPT_BYTES);
+  for (const aiModel of ["gpt-5.2", "gemini-2.5-pro"]) {
+    const files = materials.map(({ filename, text }) => new File([text], filename));
+    assert.equal((await request({ type: "discussion", context: "Topic", aiModel }, files)).status, 200);
+    const call = calls.at(-1);
+    assert.deepEqual(userData(aiModel === "gpt-5.2" ? call.input[1].content : call.contents[0].parts[0].text).materials, materials);
+    const before = calls.length, quotaBefore = quotaCalls.length;
+    files[1] = new File([materials[1].text + "a"], materials[1].filename);
+    const rejected = await request({ type: "discussion", context: "Topic", aiModel }, files);
+    assert.equal(rejected.status, 413);
+    assert.match(rejected.data.error, /257 KB of input; the limit is 256 KB/);
+    assert.match(rejected.data.error, /Course Materials.*Use in this draft/);
+    assert.equal(calls.length, before);
+    assert.equal(quotaCalls.length, quotaBefore);
+  }
+});
+
 test("invalid or oversized extracted text cannot reserve quota or reach a provider", async () => {
   const before = calls.length, quotaBefore = quotaCalls.length;
   for (const extractedMaterials of ["invalid", "null", "{}", "[null]", '[{"filename":"bad.pdf","text":""}]', JSON.stringify([{ filename: "large.pdf", text: "😀".repeat(4001) }]), JSON.stringify(Array(4).fill({ filename: "reading.docx", text: "Notes." }))]) {
@@ -473,11 +560,13 @@ test("rate limits, missing storage and the off switch fail closed", async () => 
 
 test("oversized fields, aggregate input and file counts cannot reach the provider", async () => {
   const before = calls.length;
+  const quotaBefore = quotaCalls.length;
   assert.equal((await request({ type: "discussion", context: "Topic", writingSample: "x".repeat(6001) })).status, 413);
-  assert.equal((await request({ type: "discussion", context: "x".repeat(20_000), writingSample: "x".repeat(6000), additionalInstructions: "x".repeat(4000) })).status, 413);
+  assert.equal((await request({ type: "discussion", context: "Topic" }, Array.from({ length: 3 }, (_, i) => new File(["x".repeat(100_000)], `notes${i}.txt`)))).status, 413);
   assert.equal((await request({ type: "discussion", context: "Topic" }, Array.from({ length: 4 }, (_, i) => new File(["Notes"], `notes${i}.txt`)))).status, 413);
   assert.equal((await request({ type: "discussion", context: "Topic" }, [new File(["x".repeat(128 * 1024 + 1)], "notes.txt")])).status, 413);
   assert.equal(calls.length, before);
+  assert.equal(quotaCalls.length, quotaBefore);
 });
 
 test("provider errors do not leak details, retry charges, or leave the lease occupied", async () => {

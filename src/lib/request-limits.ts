@@ -1,7 +1,10 @@
 export const MAX_REQUEST_BYTES = 512 * 1024;
 export const MAX_FILE_BYTES = 128 * 1024;
 export const MAX_FILES = 3;
-export const MAX_PROMPT_BYTES = 32_000;
+// Budget the user's serialized input separately from the app's writing rules.
+// Leave room for three full excerpts, source metadata, context, and revisions,
+// as well as an allowed 128 KB TXT/HTML upload with accompanying draft text.
+export const MAX_USER_PROMPT_BYTES = 256_000;
 export const MAX_BATCH_POSTS = 10;
 export const PROVIDER_TIMEOUT_MS = 60_000;
 export const MAX_CITATION_DETAILS_LENGTH = 1000;
@@ -31,8 +34,10 @@ export const TEXT_FIELD_LIMITS: Record<string, number> = {
   writerNotes: 4000,
   writingTone: 30,
   revisionMode: 20,
-  fileSources: 20_000,
-  extractedMaterials: 60_000,
+  // JSON escaping and metadata must not shrink the per-source text allowance.
+  // The streamed body cap and individual material validation bound these arrays.
+  fileSources: MAX_REQUEST_BYTES,
+  extractedMaterials: MAX_REQUEST_BYTES,
 };
 
 // Original documents are read in a browser worker, never uploaded to Vercel.
